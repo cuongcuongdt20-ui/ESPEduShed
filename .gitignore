@@ -1,0 +1,7 @@
+build/
+managed_components/
+sdkconfig
+sdkconfig.old
+test_host/build/
+*.tmp
+.vscode/

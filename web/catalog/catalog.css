@@ -1,0 +1,5 @@
+/* CSS của TV2: mọi lớp bắt đầu bằng "cat-" */
+.cat-list { list-style: none; padding: 0; display: grid; gap: 8px; }
+.cat-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: middle; }
+.cat-table { border-collapse: collapse; width: 100%; max-width: 480px; }
+.cat-table th, .cat-table td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; }
