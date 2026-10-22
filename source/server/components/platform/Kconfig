@@ -1,0 +1,22 @@
+menu "ESPEduShed - Platform (TV1)"
+    config LD_WIFI_SSID
+        string "Wi-Fi SSID mac dinh (dung khi NVS chua co cau hinh)"
+        default ""
+    config LD_WIFI_PASS
+        string "Wi-Fi password mac dinh"
+        default ""
+    config LD_AP_PASS
+        string "Mat khau Wi-Fi o che do AP cai dat (>= 8 ky tu)"
+        default "espedushed"
+    config LD_TCP_PORT
+        int "Cong TCP cua server"
+        range 1 65535
+        default 5000
+    config LD_MAX_CLIENTS
+        int "So client TCP toi da"
+        range 1 10
+        default 8
+    config LD_BOOT_BUTTON_GPIO
+        int "GPIO nut BOOT (giu 3 giay luc khoi dong de vao che do AP)"
+        default 0
+endmenu

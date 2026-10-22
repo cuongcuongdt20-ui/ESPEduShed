@@ -1,0 +1,4 @@
+## Thư viện tải qua IDF Component Manager (tự tải khi build lần đầu)
+dependencies:
+  idf: ">=5.1"
+  joltwallet/littlefs: "^1.14"

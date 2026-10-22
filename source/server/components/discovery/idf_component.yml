@@ -1,0 +1,4 @@
+## Thư viện cho mDNS (TV2)
+dependencies:
+  idf: ">=5.1"
+  espressif/mdns: "^1.3"
