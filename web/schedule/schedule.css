@@ -1,3 +1,0 @@
-/* CSS của TV3: mọi lớp bắt đầu bằng "sch-" */
-.sch-hint { color: var(--muted); }
-.sch-dialog { border: 1px solid var(--line); border-radius: 8px; padding: 16px; max-width: 420px; width: 100%; }

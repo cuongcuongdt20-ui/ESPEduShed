@@ -1,0 +1,6 @@
+# Bảng phân vùng flash 8 MB (TV1)
+# Name,   Type, SubType, Offset, Size
+nvs,      data, nvs,     ,       0x6000
+phy_init, data, phy,     ,       0x1000
+factory,  app,  factory, ,       2M
+data,     data, spiffs,  ,       3M

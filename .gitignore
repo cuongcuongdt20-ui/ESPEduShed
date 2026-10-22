@@ -1,7 +1,24 @@
+# ESP-IDF
 build/
 managed_components/
+dependencies.lock
 sdkconfig
 sdkconfig.old
-test_host/build/
+
+# Test trên máy tính
+source/server/test_host/build/
+
+# Electron client
+node_modules/
+out/
+dist/
+release/
+
+# Python
+__pycache__/
+*.pyc
+
+# Khác
 *.tmp
 .vscode/
+.DS_Store

@@ -1,0 +1,12 @@
+# Cấu hình mặc định (TV1). Sau khi sửa file này: xoá sdkconfig rồi build lại.
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Socket: 8 client TCP + socket nghe + UDP discovery + mDNS + SNTP
+CONFIG_LWIP_MAX_SOCKETS=16
+
+# Task chính khởi tạo cả các module: cần stack lớn hơn mặc định
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
