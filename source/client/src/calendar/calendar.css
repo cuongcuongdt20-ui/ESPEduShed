@@ -1,0 +1,45 @@
+/* Giao diện FullCalendar theo bảng màu shadcn của app (sáng / tối) - TV4 */
+.esp-cal {
+  --fc-border-color: hsl(var(--border));
+  --fc-page-bg-color: hsl(var(--background));
+  --fc-neutral-bg-color: hsl(var(--muted));
+  --fc-neutral-text-color: hsl(var(--muted-foreground));
+  --fc-list-event-hover-bg-color: hsl(var(--accent));
+  --fc-today-bg-color: hsl(var(--primary) / 0.08);
+  --fc-now-indicator-color: hsl(var(--destructive));
+  --fc-button-bg-color: hsl(var(--primary));
+  --fc-button-border-color: hsl(var(--primary));
+  --fc-button-hover-bg-color: hsl(var(--primary) / 0.9);
+  --fc-button-hover-border-color: hsl(var(--primary) / 0.9);
+  --fc-button-active-bg-color: hsl(var(--primary) / 0.8);
+  --fc-button-active-border-color: hsl(var(--primary) / 0.8);
+  color: hsl(var(--foreground));
+}
+.esp-cal .fc-toolbar-title {
+  font-size: 1.1rem;
+}
+.esp-cal .fc-event {
+  color: hsl(var(--foreground));
+  cursor: pointer;
+}
+.esp-cal .ev-conflict {
+  border-width: 2px;
+}
+.esp-cal .ev-makeup {
+  border-left: 4px solid #9333ea;
+}
+.esp-cal .ev-task {
+  border-style: dashed;
+}
+.esp-cal .ev-cancel {
+  opacity: 0.5;
+}
+.esp-cal .ev-cancel .ev-body {
+  text-decoration: line-through;
+}
+
+@media print {
+  .esp-print-hide {
+    display: none !important;
+  }
+}

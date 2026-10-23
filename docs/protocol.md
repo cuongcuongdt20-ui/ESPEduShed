@@ -162,13 +162,36 @@ client                                                   server
 
 ## 5. Lệnh của TV4 (`calendar.*`, `conflict.*`)
 
-> TV4 điền mục này. Hiện firmware có `calendar.week`, `calendar.range` (chạy được, chưa gắn xung đột) và bản giả của
-> `conflict.list`, `conflict.check`, `conflict.ack`.
+Tất cả lệnh dành cho mọi vai trò (`student` trở lên) và chỉ làm việc trên dữ liệu của chính người đăng nhập
+(`ctx->user_id`). Mã `reason` của xung đột: `1` = trùng giờ, `2` = không đủ thời gian di chuyển giữa hai cơ sở
+(khi đó `start`–`end` là khoảng nghỉ hiện có).
 
 | Lệnh | Vai trò | `data` gửi | `data` nhận | Lỗi riêng |
 |---|---|---|---|---|
-| `calendar.week` | student | `{date?}` | `{from, to, items: [{sourceId, kind, status, date, origDate, start, end, title, room, classCode, school, color}], conflicts: []}` | `BAD_ARG` (ESP chưa có giờ mà không gửi `date`) |
-| `calendar.range` | student | `{from, to}` | như `calendar.week` | `BAD_ARG` (quá 62 ngày) |
+| `calendar.week` | student | `{date?}` | `{from, to, items, conflicts, truncated?}` | `BAD_ARG` (ESP chưa có giờ mà không gửi `date`) |
+| `calendar.range` | student | `{from, to}` | như `calendar.week` | `BAD_ARG` (quá 62 ngày, hoặc quá nhiều buổi) |
+| `conflict.list` | student | `{from?, to?}` (bỏ trống: tuần hiện tại) | `{from, to, conflicts: [{a, b, date, start, end, reason, acked}], truncated?}`, với `a`, `b` là `{sourceId, kind, title, start, end}` | `BAD_ARG` |
+| `conflict.check` | student | cách 1 (dời buổi có sẵn): `{sourceId, origDate, date, start, end}`; cách 2 (buổi mới): `{date, start, end, schoolId?, campusId?, ignoreSourceId?}` | `{conflicts: [{with: {sourceId, kind, title, start, end}, date, start, end, reason}]}` (rỗng nếu không trùng); **không** trả lỗi `CONFLICT` | `BAD_ARG`, `NOT_FOUND` (không có buổi đó của người dùng) |
+| `conflict.ack` | student | `{a, b, date}` (mã nguồn của hai buổi) | `{}` | `NOT_FOUND` (cặp này không phải xung đột của người dùng), `FULL` (quá 128 xác nhận) |
+
+**`items`:** mỗi phần tử `{sourceId, kind, status, date, origDate, start, end, title, room, classCode, school, color}`.
+- `kind`: 1 = lịch dạy, 2 = công việc, 3 = dạy bù. `status`: 0 bình thường, 1 đã đổi, 2 đã huỷ, 3 nghỉ lễ.
+- Thêm `conflicts: [i, ...]` (chỉ số trong mảng `conflicts` của phản hồi) khi buổi đang có xung đột **chưa xác nhận**.
+  Không có trường này nghĩa là không có xung đột (hoặc đã bấm "Đã biết").
+
+**`conflicts`** (trong `calendar.*`): `[{a, b, date, start, end, reason, acked}]`, với `a`, `b` là `sourceId` của hai buổi.
+
+**Quy tắc xét trùng:**
+- Hai buổi cùng ngày trùng giờ khi `a.start < b.end && b.start < a.end`. Hai buổi nối sát nhau (10:00 và 10:00) không trùng.
+- Khác cơ sở và khoảng nghỉ nhỏ hơn thời gian di chuyển của `travel.*` thì báo thiếu thời gian di chuyển. Buổi không
+  gắn cơ sở (học trực tuyến) không bị xét di chuyển.
+- Bỏ qua buổi đã huỷ, nghỉ lễ, và mục không có khoảng giờ (hạn chót, `start >= end`).
+
+**Giới hạn phản hồi (khung tối đa 8 KB):** mỗi buổi khoảng 200 byte. Server dừng thêm `items` khi đủ khoảng 5,8 KB và
+đặt `truncated: true`; `conflicts` tối đa 16 mục. App gọi theo từng tuần (7 ngày) nên bình thường không chạm giới hạn.
+
+**Tin đẩy:** `conflict.ack` đẩy `{"push":"changed","entity":"conflict","id":0}` tới các phiên của chính người đó. Lịch thay
+đổi do TV3 đẩy `schedule` / `task` / `exception`, app tự tải lại.
 
 ## 6. Tìm server qua UDP (TV2)
 
