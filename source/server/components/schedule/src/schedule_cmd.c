@@ -20,39 +20,83 @@ static int not_yet(cJSON *out)
 }
 
 // occurrence.range {from, to} → {items:[{sourceId, kind, status, date, origDate, start, end, school, campus}]}
-static int occurrence_range(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
+static int occurrence_range(const ld_ctx_t *ctx,
+                            const cJSON *data,
+                            cJSON *out)
 {
+    if (!ctx || ctx->user_id == 0) {
+        return ld_fail(out, LD_ERR_UNAUTHORIZED,
+                       "Chua dang nhap", NULL);
+    }
+
     int32_t from, to;
-    if (!dt_parse_date(ld_get_str(data, "from"), &from)) return ld_fail(out, LD_ERR_BAD_ARG, "Thieu hoac sai from", "from");
-    if (!dt_parse_date(ld_get_str(data, "to"), &to)) return ld_fail(out, LD_ERR_BAD_ARG, "Thieu hoac sai to", "to");
+    if (!dt_parse_date(ld_get_str(data, "from"), &from)) {
+        return ld_fail(out, LD_ERR_BAD_ARG,
+                       "Thieu hoac sai from", "from");
+    }
+    if (!dt_parse_date(ld_get_str(data, "to"), &to)) {
+        return ld_fail(out, LD_ERR_BAD_ARG,
+                       "Thieu hoac sai to", "to");
+    }
 
     const int max = 200;
-    occurrence_t *occ = malloc(sizeof(occurrence_t) * max);
-    if (!occ) return ld_fail(out, LD_ERR_INTERNAL, "Het bo nho", NULL);
+    occurrence_t *occ = malloc(sizeof(*occ) * max);
+    if (!occ) {
+        return ld_fail(out, LD_ERR_INTERNAL, "Het bo nho", NULL);
+    }
+
     int n = sched_expand(ctx->user_id, from, to, occ, max);
     if (n < 0) {
         free(occ);
-        return ld_fail(out, LD_ERR_BAD_ARG, "Khoang ngay qua dai hoac qua nhieu buoi", NULL);
+        return ld_fail(out, LD_ERR_BAD_ARG,
+                       "Khoang ngay qua dai hoac qua nhieu buoi",
+                       NULL);
     }
+
     cJSON *arr = cJSON_AddArrayToObject(out, "items");
+    if (!arr) {
+        free(occ);
+        return ld_fail(out, LD_ERR_INTERNAL, "Het bo nho", NULL);
+    }
+
     for (int i = 0; i < n; i++) {
         char d[11], od[11], s[6], e[6];
         dt_format_date(occ[i].day, d);
         dt_format_date(occ[i].orig_day, od);
         dt_format_hm(occ[i].start_min, s);
         dt_format_hm(occ[i].end_min, e);
+
         cJSON *o = cJSON_CreateObject();
-        cJSON_AddNumberToObject(o, "sourceId", occ[i].source_id);
-        cJSON_AddNumberToObject(o, "kind", occ[i].kind);
-        cJSON_AddNumberToObject(o, "status", occ[i].status);
-        cJSON_AddStringToObject(o, "date", d);
-        cJSON_AddStringToObject(o, "origDate", od);
-        cJSON_AddStringToObject(o, "start", s);
-        cJSON_AddStringToObject(o, "end", e);
-        cJSON_AddNumberToObject(o, "school", occ[i].school_id);
-        cJSON_AddNumberToObject(o, "campus", occ[i].campus_id);
+        if (!o) {
+            free(occ);
+            return ld_fail(out, LD_ERR_INTERNAL,
+                           "Het bo nho", NULL);
+        }
+
+        bool ok =
+            cJSON_AddNumberToObject(o, "sourceId",
+                                    occ[i].source_id) &&
+            cJSON_AddNumberToObject(o, "kind", occ[i].kind) &&
+            cJSON_AddNumberToObject(o, "status", occ[i].status) &&
+            cJSON_AddStringToObject(o, "date", d) &&
+            cJSON_AddStringToObject(o, "origDate", od) &&
+            cJSON_AddStringToObject(o, "start", s) &&
+            cJSON_AddStringToObject(o, "end", e) &&
+            cJSON_AddNumberToObject(o, "school",
+                                    occ[i].school_id) &&
+            cJSON_AddNumberToObject(o, "campus",
+                                    occ[i].campus_id);
+
+        if (!ok) {
+            cJSON_Delete(o);
+            free(occ);
+            return ld_fail(out, LD_ERR_INTERNAL,
+                           "Het bo nho", NULL);
+        }
+
         cJSON_AddItemToArray(arr, o);
     }
+
     free(occ);
     return LD_OK;
 }
