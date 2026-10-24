@@ -151,14 +151,32 @@ client                                                   server
 |---|---|---|---|---|
 | `school.list` | student | – | `{schools: [{id, name, shortName, color, periods: [{no, start, end}]}]}` | |
 
+
 ## 4. Lệnh của TV3 (`schedule.*`, `exception.*`, `task.*`, `occurrence.*`)
 
-> TV3 điền mục này. Hiện firmware có `occurrence.range` (chạy được) và bản giả của `schedule.list`,
-> `schedule.create`, `exception.set`, `task.list`, `task.create`.
+Các lệnh sử dụng TCP request/response theo giao thức chung. Server xác định chủ sở hữu dữ liệu từ `ctx->user_id`; client không được tự gửi `owner_id` để xác định chủ sở hữu bản ghi.
 
-| Lệnh | Vai trò | `data` gửi | `data` nhận | Lỗi riêng |
+| Lệnh | Vai trò | `data` gửi | `data` nhận | Lỗi riêng / trạng thái |
 |---|---|---|---|---|
-| `occurrence.range` | student | `{from, to}` | `{items: [{sourceId, kind, status, date, origDate, start, end, school, campus}]}` | `BAD_ARG` (quá 62 ngày) |
+| `occurrence.range` | student | `{from, to}` | `{items: [{sourceId, kind, status, date, origDate, start, end, school, campus}]}` | `BAD_ARG` nếu ngày sai, khoảng ngày quá 62 ngày hoặc quá nhiều buổi |
+| `schedule.list` | student | `{}` | `{schedules: [{id, subject_code, subject_name, class_code, school_id, campus_id, day_of_week, period_start, period_count, room, date_from, date_to}]}` | |
+| `schedule.create` | teacher | Chưa triển khai | Chưa triển khai | Handler hiện trả về `INTERNAL` / chưa thực hiện |
+| `exception.set` | teacher | `{series_id, orig_date, type, new_date?, new_start?, new_end?, new_room?, note?}` | `{message}` | `BAD_ARG`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `FULL`, `INTERNAL` |
+| `task.list` | student | `{}` | `{tasks: [{id, type, title, content, day, until, start, end, campus_id, place, status, note}]}` | |
+| `task.create` | student | `{type, title, content, day, until?, start, end, campus_id, place, status, note}` | `{id, message}` | `BAD_ARG`, `UNAUTHORIZED`, `FORBIDDEN`, `FULL`, `INTERNAL` |
+
+### Quy ước trường
+
+- Ngày dùng `YYYY-MM-DD`; giờ dùng `HH:MM`.
+- `day_of_week`: thứ trong tuần theo quy ước của module lịch.
+- `period_start` và `period_count`: tiết bắt đầu và số tiết liên tiếp.
+- `exception.set` dùng `series_id` và `orig_date` để xác định buổi gốc. `type` tương ứng: `1` hủy, `2` đổi phòng, `3` đổi giờ, `4` chuyển buổi, `5` học bù.
+- `EXC_ROOM` yêu cầu `new_room`; `EXC_TIME` yêu cầu `new_start` và `new_end`; `EXC_MOVE` và `EXC_MAKEUP` yêu cầu `new_date`, `new_start` và `new_end`.
+- `until` có thể là `null` nếu công việc không lặp.
+- Không gửi `owner_id`; server tự gán chủ sở hữu từ phiên đăng nhập.
+- `exception.set` kiểm tra quyền sở hữu lịch và ngày gốc phải nằm trong lịch định kỳ. Chưa có kiểm tra xung đột lịch thực tế trong handler này.
+- `schedule.create` chưa được triển khai; không sử dụng lệnh này để tạo lịch cho đến khi handler được hoàn thiện.
+
 
 ## 5. Lệnh của TV4 (`calendar.*`, `conflict.*`)
 

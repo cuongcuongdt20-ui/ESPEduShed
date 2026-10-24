@@ -111,7 +111,195 @@ static int schedule_list(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
 }
 
 static int schedule_create(const ld_ctx_t *ctx, const cJSON *data, cJSON *out) { return not_yet(out); }
-static int exception_set(const ld_ctx_t *ctx, const cJSON *data, cJSON *out) { return not_yet(out); }
+
+static int exception_set(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
+{
+    int series_id, type;
+    const char *orig_date_str = ld_get_str(data, "orig_date");
+    const char *new_date_str = ld_get_str(data, "new_date");
+    const char *new_start_str = ld_get_str(data, "new_start");
+    const char *new_end_str = ld_get_str(data, "new_end");
+    const char *new_room = ld_get_str(data, "new_room");
+    const char *note = ld_get_str(data, "note");
+
+    int32_t orig_day, new_day = 0;
+    uint16_t new_start = 0, new_end = 0;
+
+    if (!ctx || ctx->user_id == 0) {
+        return ld_fail(out, LD_ERR_UNAUTHORIZED,
+                       "Chua xac thuc nguoi dung", NULL);
+    }
+
+    if (ctx->role != LD_ROLE_TEACHER) {
+        return ld_fail(out, LD_ERR_FORBIDDEN,
+                       "Chi giao vien duoc sua ngoai le lich day", NULL);
+    }
+
+    if (!ld_get_int(data, "series_id", &series_id) ||
+        series_id <= 0) {
+        return ld_fail(out, LD_ERR_BAD_ARG,
+                       "series_id khong hop le", "series_id");
+    }
+
+    if (!ld_get_int(data, "type", &type) ||
+        type < EXC_CANCEL || type > EXC_MAKEUP) {
+        return ld_fail(out, LD_ERR_BAD_ARG,
+                       "type khong hop le", "type");
+    }
+
+    if (!orig_date_str || !dt_parse_date(orig_date_str, &orig_day)) {
+        return ld_fail(out, LD_ERR_BAD_ARG,
+                       "orig_date phai co dang YYYY-MM-DD", "orig_date");
+    }
+
+    if (new_room && strlen(new_room) >= sizeof(((sched_exception_t *)0)->new_room)) {
+        return ld_fail(out, LD_ERR_BAD_ARG,
+                       "new_room vuot qua do dai cho phep", "new_room");
+    }
+
+    if (note && strlen(note) >= sizeof(((sched_exception_t *)0)->note)) {
+        return ld_fail(out, LD_ERR_BAD_ARG,
+                       "note vuot qua do dai cho phep", "note");
+    }
+
+    switch ((exc_type_t)type) {
+    case EXC_CANCEL:
+        break;
+
+    case EXC_ROOM:
+        if (!new_room || new_room[0] == '\0') {
+            return ld_fail(out, LD_ERR_BAD_ARG,
+                           "EXC_ROOM yeu cau new_room", "new_room");
+        }
+        break;
+
+    case EXC_TIME:
+        if (!new_start_str || !new_end_str ||
+            !dt_parse_hm(new_start_str, &new_start) ||
+            !dt_parse_hm(new_end_str, &new_end) ||
+            new_start >= new_end) {
+            return ld_fail(out, LD_ERR_BAD_ARG,
+                           "EXC_TIME yeu cau new_start va new_end hop le",
+                           "new_start");
+        }
+        break;
+
+    case EXC_MOVE:
+    case EXC_MAKEUP:
+        if (!new_date_str || !dt_parse_date(new_date_str, &new_day)) {
+            return ld_fail(out, LD_ERR_BAD_ARG,
+                           "Loai ngoai le nay yeu cau new_date hop le",
+                           "new_date");
+        }
+
+        if (!new_start_str || !new_end_str ||
+            !dt_parse_hm(new_start_str, &new_start) ||
+            !dt_parse_hm(new_end_str, &new_end) ||
+            new_start >= new_end) {
+            return ld_fail(out, LD_ERR_BAD_ARG,
+                           "Can new_start va new_end hop le",
+                           "new_start");
+        }
+        break;
+
+    default:
+        return ld_fail(out, LD_ERR_BAD_ARG, "type khong hop le", "type");
+    }
+
+    sched_exception_t candidate;
+    memset(&candidate, 0, sizeof(candidate));
+    candidate.series_id = (uint32_t)series_id;
+    candidate.orig_day = orig_day;
+    candidate.type = (uint8_t)type;
+    candidate.new_day = new_day;
+    candidate.new_start = new_start;
+    candidate.new_end = new_end;
+
+    if (new_room) {
+        strcpy(candidate.new_room, new_room);
+    }
+    if (note) {
+        strcpy(candidate.note, note);
+    }
+
+    ld_lock(g_sched_lock);
+
+    int series_index = -1;
+    for (int i = 0; i < g_sched.n_series; ++i) {
+        if (g_sched.series[i].id == candidate.series_id) {
+            series_index = i;
+            break;
+        }
+    }
+
+    if (series_index < 0) {
+        ld_unlock(g_sched_lock);
+        return ld_fail(out, LD_ERR_NOT_FOUND,
+                       "Khong tim thay lich day", "series_id");
+    }
+
+    const sched_series_t *series = &g_sched.series[series_index];
+
+    if (series->owner_id != ctx->user_id) {
+        ld_unlock(g_sched_lock);
+        return ld_fail(out, LD_ERR_FORBIDDEN,
+                       "Khong co quyen sua lich day nay", "series_id");
+    }
+
+    bool occurs_on_date =
+    orig_day >= series->from &&
+    orig_day <= series->to &&
+    (series->weekly
+         ? (series->weekday >= 1 &&
+            series->weekday <= 7 &&
+            dt_weekday(orig_day) == series->weekday)
+         : orig_day == series->from);
+
+    if (!occurs_on_date) {
+        ld_unlock(g_sched_lock);
+        return ld_fail(out, LD_ERR_BAD_ARG,
+                    "orig_date khong phai ngay co buoi hoc",
+                    "orig_date");
+    }
+
+    int existing_index = -1;
+    for (int i = 0; i < g_sched.n_exceptions; ++i) {
+        if (g_sched.exceptions[i].series_id == candidate.series_id &&
+            g_sched.exceptions[i].orig_day == candidate.orig_day) {
+            existing_index = i;
+            break;
+        }
+    }
+
+    if (existing_index < 0 &&
+        g_sched.n_exceptions >= SCHED_MAX_EXCEPTIONS) {
+        ld_unlock(g_sched_lock);
+        return ld_fail(out, LD_ERR_FULL,
+                       "Danh sach ngoai le da day", NULL);
+    }
+
+    if (existing_index >= 0) {
+        g_sched.exceptions[existing_index] = candidate;
+    } else {
+        g_sched.exceptions[g_sched.n_exceptions++] = candidate;
+    }
+
+    ld_unlock(g_sched_lock);
+
+    schedule_mark_dirty();
+    ld_push_changed_user(ctx->user_id, "exception", candidate.series_id);
+
+    if (!cJSON_AddStringToObject(
+            out, "message",
+            existing_index >= 0
+                ? "Cap nhat ngoai le thanh cong"
+                : "Tao ngoai le thanh cong")) {
+        return ld_fail(out, LD_ERR_INTERNAL, "Het bo nho", NULL);
+    }
+
+    return LD_OK;
+}
+
 
 static int task_list(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
 {
