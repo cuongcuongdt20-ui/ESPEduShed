@@ -144,12 +144,26 @@ client                                                   server
 
 ## 3. Lệnh của TV2 (`school.*`, `campus.*`, `periods.*`, `holiday.*`, `subject.*`, `class.*`, `travel.*`)
 
-> TV2 điền mục này. Hiện firmware có `school.list` (chạy được) và bản giả của `school.create`, `periods.set`,
-> `holiday.list`, `travel.get` (trả `INTERNAL` "Chua lam").
+> TV2: `school.list` trả về trường và bảng tiết; các màn hình danh mục gọi thêm `campus.*`, `holiday.*`, `subject.*`, `class.*` và `travel.*`.
+> Mọi lệnh đọc yêu cầu vai trò student trở lên; lệnh thay đổi yêu cầu teacher trở lên (role admin cũng được phép).
 
 | Lệnh | Vai trò | `data` gửi | `data` nhận | Lỗi riêng |
 |---|---|---|---|---|
-| `school.list` | student | – | `{schools: [{id, name, shortName, color, periods: [{no, start, end}]}]}` | |
+| `school.list` | student | `{}` | `{schools: [{id, name, shortName, color, periods: [{no, start, end}]}]}` | |
+| `school.create` / `school.update` | teacher | `{name, shortName, color}` / thêm `id` | `{id}` | `BAD_ARG`, `FULL`, `CONFLICT` |
+| `school.delete` | teacher | `{id}` | `{}` | `NOT_FOUND`, `CONFLICT` nếu lịch đang dùng trường |
+| `campus.list` | student | `{schoolId?}` | `{campuses: [{id, schoolId, name, address}]}` | |
+| `campus.create` / `campus.update` / `campus.delete` | teacher | trường/cơ sở tương ứng | `{id}` hoặc `{}` | `BAD_ARG`, `NOT_FOUND`, `FULL` |
+| `periods.set` | teacher | `{schoolId, periods: [{no, start, end}]}` | `{}` | `BAD_ARG` nếu giờ sai, tiết trùng hoặc chồng lấn |
+| `holiday.list` | student | `{schoolId?}` | `{holidays: [...]}` | |
+| `holiday.create` / `holiday.update` / `holiday.delete` | teacher | thông tin ngày nghỉ, ngày theo `YYYY-MM-DD`; `schoolId: 0` áp dụng tất cả trường | `{id}` hoặc `{}` | `BAD_ARG`, `NOT_FOUND`, `FULL` |
+| `subject.list` | student | `{}` | `{subjects: [...]}` | |
+| `subject.create` / `subject.update` / `subject.delete` | teacher | thông tin môn; sửa/xóa thêm `id` | `{id}` hoặc `{}` | `BAD_ARG`, `NOT_FOUND`, `CONFLICT` |
+| `class.list` | student | `{schoolId?}` | `{classes: [...]}` | |
+| `class.create` / `class.update` / `class.delete` | teacher | `{code, subjectId, schoolId, size}`; sửa/xóa thêm `id` | `{id}` hoặc `{}` | `BAD_ARG`, `NOT_FOUND`, `CONFLICT` nếu lịch đang dùng lớp |
+| `travel.get` | student | `{}` | `{travel: [{campusA, campusB, minutes}], defaultTravel}` | |
+| `travel.set` / `travel.delete` | teacher | `{campusA, campusB, minutes}` / `{campusA, campusB}` | `{}` | `BAD_ARG`, `NOT_FOUND`, `FULL` |
+| `travel.setDefault` | teacher | `{minutes}` | `{}` | `BAD_ARG` |
 
 ## 4. Lệnh của TV3 (`schedule.*`, `exception.*`, `task.*`, `occurrence.*`)
 
