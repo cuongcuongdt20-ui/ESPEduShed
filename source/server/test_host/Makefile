@@ -13,8 +13,8 @@ CFLAGS := -std=c11 -Wall -Wextra -Wno-unused-parameter -g -Icommon -Ifakes \
 B := build
 C := ../components
 
-.PHONY: all platform catalog schedule calendar clean
-all: platform catalog schedule calendar
+.PHONY: all platform catalog schedule schedule_cmd calendar clean
+all: platform catalog schedule schedule_cmd calendar
 
 platform: $(B)/test_platform
 	./$(B)/test_platform
@@ -22,6 +22,8 @@ catalog: $(B)/test_catalog
 	./$(B)/test_catalog
 schedule: $(B)/test_schedule
 	./$(B)/test_schedule
+schedule_cmd: $(B)/test_schedule_cmd
+	./$(B)/test_schedule_cmd
 calendar: $(B)/test_calendar
 	./$(B)/test_calendar
 
@@ -45,3 +47,14 @@ $(B):
 
 clean:
 	rm -rf $(B)
+
+CJSON_DIR ?= D:/.espressif/v5.5.6/esp-idf/components/json/cJSON
+
+$(B)/test_schedule_cmd: schedule/test_schedule_cmd.c \
+                        $(C)/schedule/src/schedule_cmd.c \
+                        $(C)/schedule/src/schedule_core.c \
+                        $(C)/schedule/src/expand.c \
+                        $(C)/catalog/src/dt.c \
+                        fakes/fake_catalog.c \
+                        $(CJSON_DIR)/cJSON.c | $(B)
+		$(CC) $(CFLAGS) -Ifakes -I$(CJSON_DIR) $^ -o $@
