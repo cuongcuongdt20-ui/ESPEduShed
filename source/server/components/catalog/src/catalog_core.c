@@ -87,8 +87,14 @@ bool catalog_period_to_time(uint16_t school_id, uint8_t first_period, uint8_t co
     if (s) {
         const cat_period_t *first = find_period(s, first_period);
         const cat_period_t *last = find_period(s, (uint8_t) (first_period + count - 1));
-        // TODO(TV2): kiểm tra mọi tiết ở giữa đều tồn tại (khoảng tiết không được vắt qua chỗ trống)
-        if (first && last && last->end > first->start) {
+        // Phải tồn tại đầy đủ mọi số tiết trong khoảng; không cho phép lịch vắt qua khoảng trống.
+        bool contiguous = first && last;
+        if (contiguous) {
+            for (unsigned n = first_period; n < (unsigned) first_period + count; n++) {
+                if (!find_period(s, (uint8_t)n)) { contiguous = false; break; }
+            }
+        }
+        if (contiguous && last->end > first->start) {
             *start_min = first->start;
             *end_min = last->end;
             ok = true;
