@@ -11,6 +11,7 @@ import { SessionProvider, useSession } from './core/session'
 import { calendarRoutes } from './calendar/routes'
 import { catalogRoutes } from './catalog/routes'
 import { scheduleRoutes } from './schedule/routes'
+import { ScheduleDialogHost } from './schedule/dialogs'
 
 const allRoutes: ModuleRoute[] = [...calendarRoutes, ...scheduleRoutes, ...catalogRoutes, ...coreRoutes].sort(
   (a, b) => (a.order ?? 50) - (b.order ?? 50),
@@ -35,6 +36,7 @@ function Shell() {
           ))}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
+      <ScheduleDialogHost />
     </AppLayout>
   )
 }

@@ -1,5 +1,5 @@
 // Thông báo ngắn góc màn hình (TV1). Dùng: const toast = useToast(); toast.error('...'); toast.ok('Đã lưu')
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
 import { cn } from '../lib/utils'
 
 type Tone = 'ok' | 'error'
@@ -19,7 +19,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setItems((xs) => [...xs, { id, tone, text }])
     setTimeout(() => setItems((xs) => xs.filter((x) => x.id !== id)), 4000)
   }, [])
-  const value = { ok: (t: string) => push('ok', t), error: (t: string) => push('error', t) }
+  // giữ nguyên object giữa các lần render: component nào để toast trong deps (useCallback/useEffect) không bị chạy lại
+  const value = useMemo(() => ({ ok: (t: string) => push('ok', t), error: (t: string) => push('error', t) }), [push])
   return (
     <Ctx.Provider value={value}>
       {children}

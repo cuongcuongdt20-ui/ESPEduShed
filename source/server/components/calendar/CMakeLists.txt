@@ -4,5 +4,5 @@ idf_component_register(
     INCLUDE_DIRS "include"
     PRIV_INCLUDE_DIRS "src"
     REQUIRES schedule
-    PRIV_REQUIRES platform json catalog
+    PRIV_REQUIRES platform json catalog esp_timer
 )

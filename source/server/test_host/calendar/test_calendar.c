@@ -54,6 +54,69 @@ TEST(kiem_tra_ung_vien)
     CHECK_EQ(conflict_check(1, &cand, 1, 1, c, 4), 0);   // đang sửa chính lịch 1: bỏ qua
 }
 
+TEST(sat_nhau_khong_trung)
+{
+    int32_t d = dt_from_ymd(2026, 9, 2);
+    occurrence_t list[] = {occ(1, d, 8 * 60, 10 * 60, 1), occ(2, d, 10 * 60, 11 * 60, 1)};   // 10:00 nối 10:00, cùng cơ sở
+    conflict_t c[4];
+    CHECK_EQ(conflict_find_in(list, 2, c, 4), 0);
+}
+
+TEST(du_thoi_gian_di_chuyen)
+{
+    int32_t d = dt_from_ymd(2026, 9, 2);
+    occurrence_t list[] = {occ(1, d, 8 * 60, 10 * 60, 1), occ(2, d, 10 * 60 + 30, 11 * 60, 2)};   // nghỉ đúng 30 phút
+    conflict_t c[4];
+    CHECK_EQ(conflict_find_in(list, 2, c, 4), 0);
+    list[1].start_min = 10 * 60 + 29;
+    CHECK_EQ(conflict_find_in(list, 2, c, 4), 1);
+    CHECK_EQ(c[0].reason, CONFLICT_TRAVEL);
+    CHECK_EQ(c[0].overlap_start, 10 * 60);          // khoảng thiếu: 10:00 → 10:29
+    CHECK_EQ(c[0].overlap_end, 10 * 60 + 29);
+    list[1].campus_id = 0;                          // học trực tuyến: không cần di chuyển
+    CHECK_EQ(conflict_find_in(list, 2, c, 4), 0);
+}
+
+TEST(ba_khoi_chong_nhau)
+{
+    int32_t d = dt_from_ymd(2026, 9, 2);
+    occurrence_t list[] = {occ(1, d, 8 * 60, 10 * 60, 1), occ(2, d, 8 * 60 + 30, 10 * 60, 1), occ(3, d, 9 * 60, 11 * 60, 1)};
+    conflict_t c[8];
+    CHECK_EQ(conflict_find_in(list, 3, c, 8), 3);   // 1-2, 1-3, 2-3
+    CHECK_EQ(conflict_find_in(list, 3, c, 2), 2);   // dừng ở max
+}
+
+TEST(tuan_vat_thang_va_ngay_khac_nhau)
+{
+    int32_t d1 = dt_from_ymd(2026, 8, 31), d2 = dt_from_ymd(2026, 9, 1);   // thứ Hai 31/8 và thứ Ba 1/9
+    occurrence_t list[] = {occ(1, d1, 8 * 60, 10 * 60, 1), occ(2, d2, 8 * 60, 10 * 60, 1), occ(3, d2, 9 * 60, 9 * 60 + 30, 1)};
+    conflict_t c[4];
+    CHECK_EQ(conflict_find_in(list, 3, c, 4), 1);   // chỉ 2-3 cùng ngày
+    CHECK_EQ(c[0].a.source_id, 2);
+    CHECK_EQ(c[0].b.source_id, 3);
+}
+
+TEST(nghi_le_va_han_chot_khong_tinh)
+{
+    int32_t d = dt_from_ymd(2026, 9, 2);
+    occurrence_t list[] = {occ(1, d, 8 * 60, 10 * 60, 1), occ(2, d, 9 * 60, 9 * 60, 1), occ(3, d, 9 * 60, 11 * 60, 1)};
+    list[2].status = OCC_HOLIDAY;
+    conflict_t c[4];
+    CHECK_EQ(conflict_find_in(list, 3, c, 4), 0);   // 2 là hạn chót (không có khoảng giờ), 3 là nghỉ lễ
+}
+
+TEST(ung_vien_nhieu_ngay)
+{
+    int32_t d = dt_from_ymd(2026, 9, 2);
+    fake_occ[0] = occ(1, d, 8 * 60, 10 * 60, 1);
+    fake_occ[1] = occ(2, d + 7, 8 * 60, 10 * 60, 1);
+    fake_n_occ = 2;
+    occurrence_t cand[] = {occ(9, d, 9 * 60, 10 * 60, 1), occ(9, d + 7, 10 * 60, 11 * 60, 1), occ(9, d + 14, 8 * 60, 9 * 60, 1)};
+    conflict_t c[8];
+    CHECK_EQ(conflict_check(1, cand, 3, 0, c, 8), 1);   // chỉ tuần đầu trùng
+    CHECK_EQ(c[0].b.source_id + c[0].a.source_id, 10);
+}
+
 int main(void)
 {
     ld_lock_init(&g_cal_lock);
@@ -61,5 +124,11 @@ int main(void)
     RUN(khong_kip_di_chuyen);
     RUN(buoi_da_huy_khong_tinh);
     RUN(kiem_tra_ung_vien);
+    RUN(sat_nhau_khong_trung);
+    RUN(du_thoi_gian_di_chuyen);
+    RUN(ba_khoi_chong_nhau);
+    RUN(tuan_vat_thang_va_ngay_khac_nhau);
+    RUN(nghi_le_va_han_chot_khong_tinh);
+    RUN(ung_vien_nhieu_ngay);
     return REPORT();
 }

@@ -21,9 +21,15 @@ extern ld_lock_t g_cal_lock;
 int  conflict_find_in(const occurrence_t *occ, int n, conflict_t *out, int max);
 bool calendar_is_acked(uint32_t a, uint32_t b, int32_t day);
 
+// So hai buổi (a, b bất kỳ thứ tự). Trả true và điền *cf nếu trùng giờ hoặc thiếu thời gian di chuyển. Logic thuần.
+bool conflict_pair(const occurrence_t *a, const occurrence_t *b, conflict_t *cf);
+
+// Xác nhận "đã biết" (chỉ dùng trong calendar_cmd.c, chạy trên ESP32)
+bool calendar_ack_add(uint32_t a, uint32_t b, int32_t day);   // false nếu bảng đầy
+
 // Lưu trữ (ack_store.c, chỉ trên ESP32)
 void calendar_acks_load(void);
-void calendar_acks_save(void);
+void calendar_acks_mark_dirty(void);   // ghi xuống flash sau 1 giây kể từ thay đổi cuối
 
 // Lệnh TCP (calendar_cmd.c, chỉ trên ESP32)
 void calendar_register_cmds(void);

@@ -137,10 +137,10 @@ Trạng thái: **Đã code** = có mã nguồn chạy được, chưa thử trê
 | **Nền tảng (TV1)** | Wi-Fi | STA tự nối lại; AP cài đặt `ESPEduShed-XXXX` và lệnh `system.wifi` | Đã code |
 | | Lưu trữ | LittleFS, ghi file tạm rồi đổi tên; sao lưu / khôi phục theo mẩu 4 KB | Đã code |
 | | Trạng thái server | `system.status`: RAM, số kết nối, số yêu cầu, handler chậm nhất | Đã code |
-| **Tìm server (TV2)** | UDP broadcast, mDNS | Cổng 5001, `espedushed.local` | Bản giả |
-| **Danh mục (TV2)** | Trường, bảng tiết, quy đổi tiết, di chuyển, ngày nghỉ, môn, lớp | | Bản giả (`school.list` chạy được) |
-| **Lịch (TV3)** | Lịch dạy định kỳ, công việc, ngoại lệ, sinh buổi | | Bản giả (`occurrence.range` chạy được) |
-| **Lịch tuần (TV4)** | Kiểm tra trùng, FullCalendar, bảng xung đột, xuất PDF | | Bản giả (`calendar.week` chạy được, chưa có xung đột) |
+| **Tìm server (TV2)** | UDP broadcast, mDNS | Cổng 5001, `espedushed.local`, tối đa 10 trả lời/giây | Đã code |
+| **Danh mục (TV2)** | Trường, cơ sở, bảng tiết, quy đổi tiết, di chuyển, ngày nghỉ, môn, lớp | 25 lệnh, lưu `/data/catalog.json` | Đã code, có test logic |
+| **Lịch (TV3)** | Lịch dạy định kỳ, công việc / hạn chót, ngoại lệ (huỷ, đổi phòng, đổi giờ, dời, dạy bù), sinh buổi | Kiểm tra trùng ở server, `force` để lưu đè | Đã code, có test logic |
+| **Lịch tuần (TV4)** | Kiểm tra trùng, FullCalendar, bảng xung đột, xuất PDF | | Đã code, có test logic |
 
 
 ---
@@ -467,8 +467,8 @@ Cột "Bằng chứng" chỉ ghi những gì đã có trong mã nguồn hoặc �
 | 2 | Ghép khung trên luồng byte TCP | Cùng một quy tắc ở C (server), TypeScript (app) và Python (công cụ); xử lý khung bị cắt, khung dính, khung quá dài | [`frame.c`](source/server/components/platform/src/frame.c), [`frame.ts`](source/client/electron/frame.ts); test [`test_platform.c`](source/server/test_host/platform/test_platform.c), [`frame.test.ts`](source/client/electron/tests/frame.test.ts); kịch bản `loadtest.py fragment` |
 | 3 | Đăng nhập challenge–response, chống replay và dò mật khẩu | PBKDF2-HMAC-SHA256 + nonce một lần gắn với kết nối; khoá IP 60 giây sau 5 lần sai | [`auth.c`](source/server/components/platform/src/auth.c), [`limiter.c`](source/server/components/platform/src/limiter.c), [`auth.ts`](source/client/electron/auth.ts); test [`crypto.test.ts`](source/client/electron/tests/crypto.test.ts); kịch bản `loadtest.py replay` |
 | 4 | Lưu trữ an toàn khi mất điện | Ghi file tạm rồi đổi tên nguyên tử trên LittleFS | [`storage.c`](source/server/components/platform/src/storage.c); kịch bản 3 ở mục 13.3 *(chưa chạy)* |
-| 5 | Kiểm tra trùng lịch và thời gian di chuyển | Thuật toán sắp xếp rồi quét trên danh sách buổi | [`conflict.c`](source/server/components/calendar/src/conflict.c) *(đang làm, TV4)* |
-| 6 | Tìm server trong LAN qua UDP broadcast và mDNS | Client không phải nhập IP | [`udp_discovery.c`](source/server/components/discovery/src/udp_discovery.c) *(đang làm, TV2)* |
+| 5 | Kiểm tra trùng lịch và thời gian di chuyển | Thuật toán sắp xếp rồi quét trên danh sách buổi | [`conflict.c`](source/server/components/calendar/src/conflict.c); test [`test_calendar.c`](source/server/test_host/calendar/test_calendar.c) |
+| 6 | Tìm server trong LAN qua UDP broadcast và mDNS | Client không phải nhập IP | [`udp_discovery.c`](source/server/components/discovery/src/udp_discovery.c), [`discovery.ts`](source/client/electron/discovery.ts) *(chưa thử trên ESP32)* |
 
 ## 7.4. Baseline vs Proposed
 
@@ -680,7 +680,7 @@ python source/tools/fake_server.py --dev      # admin / admin123
 # (Windows: chạy trong MSYS2 hoặc WSL có gcc và make)
 cd source/server/test_host
 make platform catalog schedule
-make calendar          # của TV4: FAIL cho tới khi thuật toán trùng lịch làm xong
+make calendar          # TV4: thuật toán trùng lịch
 
 # App: ghép khung và PBKDF2/HMAC phía client
 cd source/client
@@ -711,9 +711,9 @@ Trạng thái ghi đúng tình hình hiện tại. "Đã kiểm thử" chỉ ghi
 | 7 | Tin đẩy thời gian thực | Thêm tài khoản ở client A, client B nhận `changed` | Đạt với `fake_server.py` (test tích hợp `TcpClient`) |
 | 8 | Tự nối lại khi mất kết nối | App thử lại mỗi 2 giây, tự đăng nhập lại nếu ESP đã khởi động lại | Đạt với `fake_server.py` (tắt rồi bật lại server) |
 | 9 | Wi-Fi AP cài đặt, sao lưu / khôi phục | `system.wifi`, `system.backup`, `system.restore` | Đã viết, chưa chạy trên ESP32 |
-| 10 | Danh mục trường, bảng tiết (TV2) | | Đang làm |
-| 11 | Lịch dạy, công việc, ngoại lệ (TV3) | | Đang làm |
-| 12 | Lịch tuần FullCalendar, kiểm tra trùng (TV4) | | Đang làm |
+| 10 | Danh mục trường, bảng tiết (TV2) | Quy đổi tiết, tiết không liên tục | `make catalog` đạt 19/19 trên máy tính. Chưa chạy trên ESP32 |
+| 11 | Lịch dạy, công việc, ngoại lệ (TV3) | Sinh buổi, huỷ, dời, dạy bù, hạn chót | `make schedule` đạt 35/35 trên máy tính. Chưa chạy trên ESP32 |
+| 12 | Lịch tuần FullCalendar, kiểm tra trùng (TV4) | Trùng giờ, thiếu thời gian di chuyển | `make calendar` đạt 23/23 trên máy tính. Chưa chạy trên ESP32 |
 
 ---
 
