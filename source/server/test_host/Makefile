@@ -40,8 +40,16 @@ $(B)/test_calendar: calendar/test_calendar.c $(C)/calendar/src/conflict.c \
                     $(C)/catalog/src/dt.c fakes/fake_catalog.c fakes/fake_schedule.c | $(B)
 	$(CC) $(CFLAGS) $^ -o $@
 
+ifeq ($(OS),Windows_NT)
+$(B):
+	if not exist "$(B)" mkdir "$(B)"
+
+clean:
+	if exist "$(B)" rmdir /s /q "$(B)"
+else
 $(B):
 	mkdir -p $(B)
 
 clean:
 	rm -rf $(B)
+endif
