@@ -74,7 +74,21 @@ bool sched_label(uint32_t source_id, uint8_t kind, char title[65], char room[17]
             found = true;
         }
     }
-    // TODO(TV3): buổi có ngoại lệ đổi phòng thì nhãn phòng lấy từ ngoại lệ (cần thêm orig_day nếu muốn chính xác)
+    ld_unlock(g_sched_lock);
+    return found;
+}
+
+bool sched_room_override(uint32_t source_id, int32_t orig_day, char room[17])
+{
+    bool found = false;
+    ld_lock(g_sched_lock);
+    for (int i = 0; i < g_sched.n_exceptions && !found; i++) {
+        const sched_exception_t *e = &g_sched.exceptions[i];
+        if (e->series_id != source_id || e->orig_day != orig_day || e->type != EXC_ROOM) continue;
+        memcpy(room, e->new_room, 17);
+        room[16] = 0;
+        found = true;
+    }
     ld_unlock(g_sched_lock);
     return found;
 }

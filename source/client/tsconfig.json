@@ -15,7 +15,7 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "types": ["node"],
-    "paths": { "@/*": ["src/*"] }
+    "paths": { "@/*": ["./src/*"] }
   },
   "include": ["electron", "src", "electron.vite.config.ts"]
 }

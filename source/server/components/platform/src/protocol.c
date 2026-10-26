@@ -72,6 +72,27 @@ bool ld_get_int(const cJSON *data, const char *key, int *out)
     return true;
 }
 
+int ld_page_offset(const cJSON *data)
+{
+    int off = 0;
+    return ld_get_int(data, "offset", &off) && off > 0 ? off : 0;
+}
+
+bool ld_page_add(cJSON *arr, cJSON *item, int *budget)
+{
+    char *text = cJSON_PrintUnformatted(item);
+    int n = text ? (int) strlen(text) + 1 : 0;
+    cJSON_free(text);
+    // Mục đầu tiên của trang luôn được nhận (mỗi mục đơn lẻ đều nhỏ hơn 8 KB), để trang nào cũng tiến lên
+    if (!item || (n > *budget && cJSON_GetArraySize(arr) > 0)) {
+        cJSON_Delete(item);
+        return false;
+    }
+    *budget -= n;
+    cJSON_AddItemToArray(arr, item);
+    return true;
+}
+
 bool ld_get_bool(const cJSON *data, const char *key, bool *out)
 {
     const cJSON *it = data ? cJSON_GetObjectItemCaseSensitive(data, key) : NULL;

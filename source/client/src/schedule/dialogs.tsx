@@ -2,9 +2,10 @@
 // Mở qua editor.ts; ScheduleDialogHost được gắn một lần trong App.tsx nên mở được từ trang lịch lẫn trang danh sách.
 import { useEffect, useState, type ReactNode } from 'react'
 import { AlertTriangle, Save, Trash2, X } from 'lucide-react'
-import { api, ApiError, errorText } from '../core/api'
+import { api, ApiError, errorText, requestAll } from '../core/api'
 import { useSession } from '../core/session'
 import { useToast } from '../core/components/toast'
+import { useConfirm } from '../core/components/confirm'
 import { Button } from '../core/components/ui/button'
 import { Input, Label, Select } from '../core/components/ui/input'
 import { onEditorRequest, openEditor, type EditorRequest } from './editor'
@@ -100,6 +101,7 @@ async function send(cmd: string, data: Row): Promise<{ ok: true; res: Row } | { 
 
 function SeriesForm({ id, prefill, onClose }: { id?: number; prefill?: Row; onClose: () => void }) {
   const toast = useToast()
+  const confirm = useConfirm()
   const [schools, setSchools] = useState<Row[]>([])
   const [campuses, setCampuses] = useState<Row[]>([])
   const [conflicts, setConflicts] = useState<Row[] | null>(null)
@@ -118,11 +120,11 @@ function SeriesForm({ id, prefill, onClose }: { id?: number; prefill?: Row; onCl
   const set = (k: string, v: unknown) => setF((x) => ({ ...x, [k]: v }))
 
   useEffect(() => {
-    api.request<Row>('school.list').then((r) => {
-      setSchools(r.schools ?? [])
-      setF((x) => (x.school_id ? x : { ...x, school_id: String(r.schools?.[0]?.id ?? '') }))
+    requestAll<Row>('school.list', 'schools').then((schools) => {
+      setSchools(schools)
+      setF((x) => (x.school_id ? x : { ...x, school_id: String(schools[0]?.id ?? '') }))
     }).catch((e) => toast.error(errorText(e)))
-    api.request<Row>('campus.list').then((r) => setCampuses(r.campuses ?? [])).catch(() => {})
+    requestAll<Row>('campus.list', 'campuses').then(setCampuses).catch(() => {})
     if (id)
       api.request<Row>('schedule.get', { id }).then(({ schedule: s }) =>
         setF({
@@ -165,7 +167,7 @@ function SeriesForm({ id, prefill, onClose }: { id?: number; prefill?: Row; onCl
   }
 
   async function remove() {
-    if (!id || !window.confirm('Xoá lịch dạy này và mọi thay đổi buổi của nó?')) return
+    if (!id || !(await confirm('Xoá lịch dạy này và mọi thay đổi buổi của nó?'))) return
     try {
       await api.request('schedule.delete', { id })
       toast.ok('Đã xoá lịch dạy')
@@ -248,6 +250,7 @@ function SeriesForm({ id, prefill, onClose }: { id?: number; prefill?: Row; onCl
 
 function TaskForm({ id, prefill, onClose }: { id?: number; prefill?: Row; onClose: () => void }) {
   const toast = useToast()
+  const confirm = useConfirm()
   const [conflicts, setConflicts] = useState<Row[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [f, setF] = useState<Row>(() => ({
@@ -259,8 +262,8 @@ function TaskForm({ id, prefill, onClose }: { id?: number; prefill?: Row; onClos
 
   useEffect(() => {
     if (!id) return
-    api.request<Row>('task.list').then((r) => {
-      const t = (r.tasks ?? []).find((x: Row) => x.id === id)
+    requestAll<Row>('task.list', 'tasks').then((tasks) => {
+      const t = tasks.find((x: Row) => x.id === id)
       if (t) setF({ ...t, until: t.until ?? '' })
       else toast.error('Không tìm thấy công việc')
     }).catch((e) => toast.error(errorText(e)))
@@ -290,7 +293,7 @@ function TaskForm({ id, prefill, onClose }: { id?: number; prefill?: Row; onClos
   }
 
   async function remove() {
-    if (!id || !window.confirm('Xoá công việc này?')) return
+    if (!id || !(await confirm('Xoá công việc này?'))) return
     try {
       await api.request('task.delete', { id })
       toast.ok('Đã xoá công việc')

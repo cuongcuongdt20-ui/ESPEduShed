@@ -117,6 +117,41 @@ TEST(ung_vien_nhieu_ngay)
     CHECK_EQ(c[0].b.source_id + c[0].a.source_id, 10);
 }
 
+TEST(di_chuyen_chi_xet_hai_buoi_lien_nhau)
+{
+    int32_t d = dt_from_ymd(2026, 9, 2);
+    // 07:00–08:00 cơ sở 1, 08:00–08:30 cơ sở 1, 08:50–09:30 cơ sở 2 (cần 30 phút): chỉ cặp thứ 2–3 thiếu thời gian
+    occurrence_t list[] = {occ(1, d, 7 * 60, 8 * 60, 1), occ(2, d, 8 * 60, 8 * 60 + 30, 1), occ(3, d, 8 * 60 + 50, 9 * 60 + 30, 2)};
+    conflict_t c[4];
+    CHECK_EQ(conflict_find_in(list, 3, c, 4), 1);
+    CHECK_EQ(c[0].a.source_id, 2);
+    CHECK_EQ(c[0].reason, CONFLICT_TRAVEL);
+}
+
+TEST(doi_buoi_vao_gio_buoi_khac_cung_lich_van_bao)
+{
+    int32_t d = dt_from_ymd(2026, 9, 9);
+    fake_occ[0] = occ(5, d, 8 * 60, 10 * 60, 1);          // buổi thường của lịch 5 ngày d
+    fake_n_occ = 1;
+    conflict_t c[4];
+    occurrence_t moved = occ(5, d, 9 * 60, 10 * 60, 1);   // buổi tuần trước của lịch 5 dời sang ngày d
+    moved.orig_day = d - 7;
+    CHECK_EQ(conflict_check(1, &moved, 1, 5, c, 4), 1);
+    occurrence_t same = occ(5, d, 9 * 60, 10 * 60, 1);    // chính buổi ngày d đổi giờ: không so với bản cũ của nó
+    CHECK_EQ(conflict_check(1, &same, 1, 5, c, 4), 0);
+}
+
+TEST(ung_vien_chi_xet_di_chuyen_voi_buoi_lien_ke)
+{
+    int32_t d = dt_from_ymd(2026, 9, 16);
+    fake_occ[0] = occ(1, d, 7 * 60, 8 * 60, 2);           // cơ sở 2, xa ứng viên (có buổi khác chen giữa)
+    fake_occ[1] = occ(2, d, 8 * 60, 9 * 60, 1);           // cơ sở 1, liền trước ứng viên
+    fake_n_occ = 2;
+    occurrence_t cand = occ(9, d, 9 * 60 + 10, 10 * 60, 1);
+    conflict_t c[4];
+    CHECK_EQ(conflict_check(1, &cand, 1, 0, c, 4), 0);    // cùng cơ sở với buổi liền trước: không báo
+}
+
 int main(void)
 {
     ld_lock_init(&g_cal_lock);
@@ -130,5 +165,8 @@ int main(void)
     RUN(tuan_vat_thang_va_ngay_khac_nhau);
     RUN(nghi_le_va_han_chot_khong_tinh);
     RUN(ung_vien_nhieu_ngay);
+    RUN(di_chuyen_chi_xet_hai_buoi_lien_nhau);
+    RUN(doi_buoi_vao_gio_buoi_khac_cung_lich_van_bao);
+    RUN(ung_vien_chi_xet_di_chuyen_voi_buoi_lien_ke);
     return REPORT();
 }

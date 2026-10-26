@@ -5,7 +5,7 @@
 
 #include "cJSON.h"
 #include "esp_log.h"
-#include "esp_timer.h"
+
 #include "platform.h"
 #include "schedule.h"
 #include "schedule_internal.h"
@@ -15,7 +15,6 @@
 #define SCHEDULE_SCHEMA 1
 
 static const char *TAG = "schedule";
-static esp_timer_handle_t s_save_timer;
 /* Khong tu dong ghi de file neu file lich ton tai nhung khong hop le. */
 static bool s_storage_invalid;
 
@@ -282,146 +281,147 @@ static bool parse_exception(const cJSON *v, sched_exception_t *e)
     return true;
 }
 
-/* ---------- Load: chỉ cập nhật g_sched khi toàn bộ file hợp lệ ---------- */
+/* ---------- Load: chỉ dùng dữ liệu khi toàn bộ file hợp lệ ---------- */
+/*
+ * Định dạng hiện tại (schema 2, JSON Lines): dòng đầu {"schema":2,"nextId":N}, mỗi dòng sau là một bản ghi có
+ * "k": "series" | "task" | "exception". Nạp và ghi từng dòng nên RAM chỉ cần cỡ một bản ghi, không phải cả file.
+ * Định dạng cũ (schema 1, một JSON object) vẫn đọc được; lần ghi sau sẽ chuyển sang dạng dòng.
+ * Nạp thẳng vào g_sched (chỉ gọi lúc khởi động, chưa có ai dùng), không cần bản nháp schedule_t ~100 KB.
+ */
+#define SCHEDULE_SCHEMA_LINES 2
+#define LINE_MAX_LEN          2048
 
-bool schedule_load(void)
+/* Kiểm tra ID duy nhất trong từng loại và tham chiếu ngoại lệ. */
+static bool validate_loaded(const schedule_t *s)
+{
+    for (int i = 0; i < s->n_series; ++i)
+        for (int j = i + 1; j < s->n_series; ++j)
+            if (s->series[i].id == s->series[j].id) return false;
+
+    for (int i = 0; i < s->n_tasks; ++i)
+        for (int j = i + 1; j < s->n_tasks; ++j)
+            if (s->tasks[i].id == s->tasks[j].id) return false;
+
+    for (int i = 0; i < s->n_exceptions; ++i) {
+        bool found = false;
+        for (int j = 0; j < s->n_series && !found; ++j)
+            found = s->series[j].id == s->exceptions[i].series_id;
+        if (!found) return false;
+        for (int j = i + 1; j < s->n_exceptions; ++j)
+            if (s->exceptions[i].series_id == s->exceptions[j].series_id &&
+                s->exceptions[i].orig_day == s->exceptions[j].orig_day)
+                return false;
+    }
+    return true;
+}
+
+/* Đọc file định dạng cũ (một JSON object) vào dst. Tốn RAM theo cỡ file, chỉ dùng cho file lưu bởi bản cũ. */
+static bool load_legacy(schedule_t *dst)
 {
     size_t len = 0;
     char *text = store_read_all(SCHEDULE_FILE, &len);
-
-    s_storage_invalid = false;
-
-    if (!text) {
-        return false; /* Chua co file hoac khong doc duoc. */
-    }
-
+    if (!text) return false;
     cJSON *root = cJSON_ParseWithLength(text, len);
     free(text);
-
     if (!cJSON_IsObject(root)) {
-        ESP_LOGE(TAG, "%s khong phai JSON object hop le", SCHEDULE_FILE);
         cJSON_Delete(root);
-        s_storage_invalid = true;
         return false;
     }
 
     int64_t schema, next_id;
     const cJSON *series = cJSON_GetObjectItemCaseSensitive(root, "series");
     const cJSON *tasks = cJSON_GetObjectItemCaseSensitive(root, "tasks");
-    const cJSON *exceptions =
-        cJSON_GetObjectItemCaseSensitive(root, "exceptions");
-
+    const cJSON *exceptions = cJSON_GetObjectItemCaseSensitive(root, "exceptions");
     bool ok =
         json_int(root, "schema", SCHEDULE_SCHEMA, SCHEDULE_SCHEMA, &schema) &&
         json_int(root, "nextId", 1, UINT32_MAX, &next_id) &&
-        cJSON_IsArray(series) &&
-        cJSON_IsArray(tasks) &&
-        cJSON_IsArray(exceptions) &&
+        cJSON_IsArray(series) && cJSON_IsArray(tasks) && cJSON_IsArray(exceptions) &&
         cJSON_GetArraySize(series) <= SCHED_MAX_SERIES &&
         cJSON_GetArraySize(tasks) <= SCHED_MAX_TASKS &&
         cJSON_GetArraySize(exceptions) <= SCHED_MAX_EXCEPTIONS;
 
-    schedule_t *tmp = NULL;
-
-    if (ok) {
-        tmp = calloc(1, sizeof(*tmp));
-        if (!tmp) ok = false;
+    if (ok) dst->next_id = (uint32_t) next_id;
+    const cJSON *item;
+    if (ok) cJSON_ArrayForEach(item, series) {
+        if (!(ok = parse_series(item, &dst->series[dst->n_series]))) break;
+        dst->n_series++;
     }
-
-    if (ok) {
-        tmp->next_id = (uint32_t)next_id;
-
-        const cJSON *item;
-        cJSON_ArrayForEach(item, series) {
-            if (!parse_series(item, &tmp->series[tmp->n_series])) {
-                ok = false;
-                break;
-            }
-            tmp->n_series++;
-        }
+    if (ok) cJSON_ArrayForEach(item, tasks) {
+        if (!(ok = parse_task(item, &dst->tasks[dst->n_tasks]))) break;
+        dst->n_tasks++;
     }
-
-    if (ok) {
-        const cJSON *item;
-        cJSON_ArrayForEach(item, tasks) {
-            if (!parse_task(item, &tmp->tasks[tmp->n_tasks])) {
-                ok = false;
-                break;
-            }
-            tmp->n_tasks++;
-        }
+    if (ok) cJSON_ArrayForEach(item, exceptions) {
+        if (!(ok = parse_exception(item, &dst->exceptions[dst->n_exceptions]))) break;
+        dst->n_exceptions++;
     }
-
-    if (ok) {
-        const cJSON *item;
-        cJSON_ArrayForEach(item, exceptions) {
-            if (!parse_exception(item,
-                    &tmp->exceptions[tmp->n_exceptions])) {
-                ok = false;
-                break;
-            }
-            tmp->n_exceptions++;
-        }
-    }
-
-    /* Kiểm tra ID duy nhất trong từng loại và tham chiếu ngoại lệ. */
-    if (ok) {
-        for (int i = 0; i < tmp->n_series && ok; ++i) {
-            for (int j = i + 1; j < tmp->n_series; ++j) {
-                if (tmp->series[i].id == tmp->series[j].id) {
-                    ok = false;
-                    break;
-                }
-            }
-        }
-
-        for (int i = 0; i < tmp->n_tasks && ok; ++i) {
-            for (int j = i + 1; j < tmp->n_tasks; ++j) {
-                if (tmp->tasks[i].id == tmp->tasks[j].id) {
-                    ok = false;
-                    break;
-                }
-            }
-        }
-
-        for (int i = 0; i < tmp->n_exceptions && ok; ++i) {
-            bool found = false;
-
-            for (int j = 0; j < tmp->n_series; ++j) {
-                if (tmp->series[j].id == tmp->exceptions[i].series_id) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                ok = false;
-                break;
-            }
-
-            for (int j = i + 1; j < tmp->n_exceptions; ++j) {
-                if (tmp->exceptions[i].series_id ==
-                        tmp->exceptions[j].series_id &&
-                    tmp->exceptions[i].orig_day ==
-                        tmp->exceptions[j].orig_day) {
-                    ok = false;
-                    break;
-                }
-            }
-        }
-    }
-
-    if (ok) {
-        ld_lock(g_sched_lock);
-        memcpy(&g_sched, tmp, sizeof(g_sched));
-        ld_unlock(g_sched_lock);
-    } else {
-        s_storage_invalid = true;
-        ESP_LOGE(TAG, "%s co schema hoac du lieu khong hop le",
-                 SCHEDULE_FILE);
-    }
-
-    free(tmp);
     cJSON_Delete(root);
+    return ok;
+}
+
+/* Một dòng bản ghi của định dạng mới vào dst. */
+static bool load_record(schedule_t *dst, const cJSON *v)
+{
+    const cJSON *k = cJSON_GetObjectItemCaseSensitive(v, "k");
+    if (!cJSON_IsString(k)) return false;
+    if (!strcmp(k->valuestring, "series")) {
+        if (dst->n_series >= SCHED_MAX_SERIES || !parse_series(v, &dst->series[dst->n_series])) return false;
+        dst->n_series++;
+    } else if (!strcmp(k->valuestring, "task")) {
+        if (dst->n_tasks >= SCHED_MAX_TASKS || !parse_task(v, &dst->tasks[dst->n_tasks])) return false;
+        dst->n_tasks++;
+    } else if (!strcmp(k->valuestring, "exception")) {
+        if (dst->n_exceptions >= SCHED_MAX_EXCEPTIONS || !parse_exception(v, &dst->exceptions[dst->n_exceptions]))
+            return false;
+        dst->n_exceptions++;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+bool schedule_load(void)
+{
+    s_storage_invalid = false;
+    store_reader_t *r = store_open_lines(SCHEDULE_FILE);
+    if (!r) return false; /* Chua co file. */
+
+    char *line = malloc(LINE_MAX_LEN);
+    bool ok = line != NULL, legacy = false;
+
+    ld_lock(g_sched_lock);
+    memset(&g_sched, 0, sizeof(g_sched));
+
+    if (ok) {
+        int n = store_next_line(r, line, LINE_MAX_LEN);
+        cJSON *head = n > 0 ? cJSON_Parse(line) : NULL;
+        int64_t schema = 0, next_id = 0;
+        if (n != 0 && !(cJSON_IsObject(head) &&
+                        json_int(head, "schema", SCHEDULE_SCHEMA_LINES, SCHEDULE_SCHEMA_LINES, &schema))) {
+            legacy = true;   /* dòng đầu không phải header mới: file định dạng cũ (hoặc hỏng) */
+        } else {
+            ok = n > 0 && json_int(head, "nextId", 1, UINT32_MAX, &next_id);
+            if (ok) g_sched.next_id = (uint32_t) next_id;
+        }
+        cJSON_Delete(head);
+        while (ok && !legacy && (n = store_next_line(r, line, LINE_MAX_LEN)) != 0) {
+            cJSON *v = n > 0 ? cJSON_Parse(line) : NULL;
+            ok = cJSON_IsObject(v) && load_record(&g_sched, v);
+            cJSON_Delete(v);
+        }
+    }
+    store_close_lines(r);
+    free(line);
+
+    if (ok && legacy) ok = load_legacy(&g_sched);
+    if (ok) ok = validate_loaded(&g_sched);
+    if (!ok) {
+        // File có nhưng không nạp được (hỏng, hoặc hết RAM để nạp): không ghi đè, để không mất dữ liệu thật
+        memset(&g_sched, 0, sizeof(g_sched));
+        g_sched.next_id = 1;
+        s_storage_invalid = true;
+        ESP_LOGE(TAG, "%s khong hop le hoac khong du RAM de nap", SCHEDULE_FILE);
+    }
+    ld_unlock(g_sched_lock);
     return ok;
 }
 
@@ -562,9 +562,18 @@ static bool add_exception_json(cJSON *a, const sched_exception_t *e)
     return true;
 }
 
-static void save_now(void *arg)
+/* Ghi một bản ghi thành một dòng, thêm "k" cho biết loại. */
+static bool put_record(store_writer_t *w, cJSON *o, const char *kind)
 {
-    (void)arg;
+    if (!o || !cJSON_AddStringToObject(o, "k", kind)) return false;
+    char *text = cJSON_PrintUnformatted(o);
+    bool ok = text && store_put_line(w, text);
+    cJSON_free(text);
+    return ok;
+}
+
+static void save_now(void)
+{
     if (s_storage_invalid) {
         ESP_LOGE(TAG,
                 "bo qua ghi %s de tranh ghi de du lieu loi",
@@ -572,81 +581,43 @@ static void save_now(void *arg)
         return;
     }
 
-    cJSON *root = cJSON_CreateObject();
-    cJSON *series = cJSON_CreateArray();
-    cJSON *tasks = cJSON_CreateArray();
-    cJSON *exceptions = cJSON_CreateArray();
-
-    if (!root || !series || !tasks || !exceptions) {
-        cJSON_Delete(root);
-        cJSON_Delete(series);
-        cJSON_Delete(tasks);
-        cJSON_Delete(exceptions);
+    store_writer_t *w = store_begin(SCHEDULE_FILE);
+    if (!w) {
+        ESP_LOGE(TAG, "khong mo duoc %s de ghi", SCHEDULE_FILE);
         return;
     }
 
-    bool ok = true;
-
+    /* Giữ khoá suốt lần ghi để file là một ảnh nhất quán (không lẫn trước/sau một thay đổi). */
     ld_lock(g_sched_lock);
+    char head[64];
+    snprintf(head, sizeof(head), "{\"schema\":%d,\"nextId\":%lu}", SCHEDULE_SCHEMA_LINES,
+             (unsigned long) g_sched.next_id);
+    bool ok = store_put_line(w, head);
 
-    ok = cJSON_AddNumberToObject(root, "schema", SCHEDULE_SCHEMA) &&
-         cJSON_AddNumberToObject(root, "nextId", g_sched.next_id) &&
-         cJSON_AddItemToObject(root, "series", series) &&
-         cJSON_AddItemToObject(root, "tasks", tasks) &&
-         cJSON_AddItemToObject(root, "exceptions", exceptions);
-
-    for (int i = 0; i < g_sched.n_series && ok; ++i)
-        ok = add_series_json(series, &g_sched.series[i]);
-
-    for (int i = 0; i < g_sched.n_tasks && ok; ++i)
-        ok = add_task_json(tasks, &g_sched.tasks[i]);
-
-    for (int i = 0; i < g_sched.n_exceptions && ok; ++i)
-        ok = add_exception_json(exceptions, &g_sched.exceptions[i]);
-
+    for (int i = 0; i < g_sched.n_series && ok; ++i) {
+        cJSON *a = cJSON_CreateArray();
+        ok = a && add_series_json(a, &g_sched.series[i]) && put_record(w, a->child, "series");
+        cJSON_Delete(a);
+    }
+    for (int i = 0; i < g_sched.n_tasks && ok; ++i) {
+        cJSON *a = cJSON_CreateArray();
+        ok = a && add_task_json(a, &g_sched.tasks[i]) && put_record(w, a->child, "task");
+        cJSON_Delete(a);
+    }
+    for (int i = 0; i < g_sched.n_exceptions && ok; ++i) {
+        cJSON *a = cJSON_CreateArray();
+        ok = a && add_exception_json(a, &g_sched.exceptions[i]) && put_record(w, a->child, "exception");
+        cJSON_Delete(a);
+    }
     ld_unlock(g_sched_lock);
 
-    if (!ok) {
-        ESP_LOGE(TAG, "tao JSON lich that bai");
-        cJSON_Delete(root);
-        return;
-    }
-
-    char *text = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
-
-    if (!text) {
-        ESP_LOGE(TAG, "khong du bo nho tao JSON lich");
-        return;
-    }
-
-    esp_err_t err = store_write_atomic(SCHEDULE_FILE, text, strlen(text));
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "ghi %s loi: %s", SCHEDULE_FILE, esp_err_to_name(err));
-    }
-
-    free(text);
+    if (store_end(w, ok) != ESP_OK) ESP_LOGE(TAG, "ghi %s loi, giu ban cu", SCHEDULE_FILE);
 }
 
 void schedule_mark_dirty(void)
 {
-    if (!s_save_timer) {
-        esp_timer_create_args_t args = {
-            .callback = save_now,
-            .name = "schedule_save"
-        };
-
-        if (esp_timer_create(&args, &s_save_timer) != ESP_OK) {
-            ESP_LOGE(TAG, "tao save timer that bai");
-            return;
-        }
-    }
-
-    esp_timer_stop(s_save_timer);
-
-    if (esp_timer_start_once(s_save_timer, 1000 * 1000) != ESP_OK) {
-        ESP_LOGE(TAG, "khoi dong save timer that bai");
-    }
+    /* Ghi sau 1 giay ke tu thay doi cuoi, tren task ghi cua platform. */
+    store_save_later(save_now);
 }
 
 void schedule_init(void)
@@ -659,7 +630,7 @@ void schedule_init(void)
                     "%s ton tai nhung khong hop le; khong dung du lieu mau",
                     SCHEDULE_FILE);
         } else {
-            s_storage_invalid = true;
+            // Chưa có file: dùng dữ liệu mẫu và vẫn cho ghi, lần lưu đầu tiên sẽ tạo file
             ESP_LOGW(TAG,
                     "chua co %s; dung du lieu mau",
                     SCHEDULE_FILE);

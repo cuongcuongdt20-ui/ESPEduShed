@@ -4,9 +4,10 @@
 //   - trùng giờ: a.start < b.end && b.start < a.end  -> CONFLICT_OVERLAP, overlap = [max start, min end]
 //   - khác cơ sở và khoảng nghỉ giữa hai buổi < catalog_travel_minutes(a.campus, b.campus) -> CONFLICT_TRAVEL
 //   - bỏ qua buổi OCC_CANCELLED, OCC_HOLIDAY và buổi không có khoảng giờ (hạn chót: start >= end)
-// Độ phức tạp: với mỗi buổi i chỉ xét các buổi j > i cùng ngày có start_j < end_i + GAP_CAP, vì danh sách đã sắp
-// theo start nên dừng ngay khi vượt. Trường hợp thường O(n + k) (k = số cặp được xét, nhỏ), xấu nhất O(n^2) khi mọi
-// buổi chồng nhau. Phần ứng viên (conflict_check) thêm O(m log m) nếu phải sắp, ở đây không cần vì so từng cặp.
+// Với mỗi buổi i chỉ xét các buổi j > i cùng ngày: những buổi bắt đầu trước khi i kết thúc (trùng giờ), rồi đúng một
+// buổi kế tiếp sau i (thời gian di chuyển chỉ tính giữa hai buổi liền nhau); danh sách đã sắp theo start nên dừng ở đó.
+// Độ phức tạp O(n + k) (k = số cặp trùng giờ), xấu nhất O(n^2) khi mọi buổi chồng nhau.
+// conflict_check: nạp lịch một lần cho cả cửa sổ ngày (tối đa 62 ngày); mỗi ứng viên so với các buổi cùng ngày: O(m·d).
 #include <stdlib.h>
 #include "conflict.h"
 #include "calendar_internal.h"
@@ -67,37 +68,66 @@ int conflict_find_in(const occurrence_t *occ, int n, conflict_t *out, int max)
         if (!counts(&occ[i])) continue;
         for (int j = i + 1; j < n && k < max; j++) {
             if (occ[j].day != occ[i].day) break;
-            if (occ[j].start_min >= occ[i].end_min + GAP_CAP) break;
+            if (!counts(&occ[j])) continue;
+            if (occ[j].start_min < occ[i].end_min) {          // bắt đầu trước khi i kết thúc: trùng giờ
+                if (conflict_pair(&occ[i], &occ[j], &out[k])) k++;
+                continue;
+            }
+            // j là buổi đầu tiên sau khi i kết thúc: chỉ cặp liền nhau này mới xét thời gian di chuyển
+            // (có buổi khác chen giữa thì người dạy đi từ buổi chen giữa, không đi thẳng từ i)
             if (conflict_pair(&occ[i], &occ[j], &out[k])) k++;
+            break;
         }
     }
     return k;
 }
 
-#define DAY_MAX 64             // số buổi tối đa của một người trong một ngày
+#define WIN_MAX 240            // số buổi tối đa nạp một lần cho cả cửa sổ ngày
 
 int conflict_check(uint16_t user_id, const occurrence_t *candidates, int n, uint32_t ignore_source_id,
                    conflict_t *out, int max)
 {
     if (n <= 0 || max <= 0) return 0;
-    occurrence_t *day_occ = malloc(sizeof(occurrence_t) * DAY_MAX);
-    if (!day_occ) return 0;
+    occurrence_t *buf = malloc(sizeof(occurrence_t) * WIN_MAX);
+    if (!buf) return 0;
     int k = 0, have = 0;
-    int32_t loaded = -1;                              // ngày đang nằm trong day_occ
+    int32_t win_from = 1, win_to = 0;                 // cửa sổ ngày đang nạp trong buf (rỗng lúc đầu)
     for (int i = 0; i < n && k < max; i++) {
         const occurrence_t *c = &candidates[i];
         if (!counts(c)) continue;
-        if (c->day != loaded) {                       // ứng viên thường đã theo thứ tự ngày: mỗi ngày nạp một lần
-            have = sched_expand(user_id, c->day, c->day, day_occ, DAY_MAX);
-            if (have < 0) have = 0;
-            loaded = c->day;
+        if (c->day < win_from || c->day > win_to) {
+            // Nạp một lần cho cả khoảng tới ứng viên xa nhất (tối đa 62 ngày) thay vì từng ngày
+            int32_t to = c->day;
+            for (int m = i + 1; m < n; m++)
+                if (candidates[m].day > to && candidates[m].day < c->day + SCHED_MAX_RANGE_DAYS) to = candidates[m].day;
+            have = sched_expand(user_id, c->day, to, buf, WIN_MAX);
+            if (have < 0) {                           // quá nhiều buổi trong khoảng: nạp riêng ngày này
+                to = c->day;
+                have = sched_expand(user_id, c->day, c->day, buf, WIN_MAX);
+                if (have < 0) have = 0;
+            }
+            win_from = c->day;
+            win_to = to;
         }
+        // Trùng giờ: so với mọi buổi cùng ngày. Di chuyển: chỉ với buổi liền trước và liền sau ứng viên.
+        // Bỏ qua đúng buổi đang được sửa (cùng nguồn, cùng ngày gốc), không bỏ các buổi khác của cùng lịch.
+        const occurrence_t *prev = NULL, *next = NULL;
         for (int j = 0; j < have && k < max; j++) {
-            if (day_occ[j].source_id == ignore_source_id) continue;
-            if (conflict_pair(c, &day_occ[j], &out[k])) k++;
+            const occurrence_t *e = &buf[j];
+            if (e->day != c->day || !counts(e)) continue;
+            if (e->source_id == ignore_source_id && e->orig_day == c->orig_day) continue;
+            if (e->start_min < c->end_min && c->start_min < e->end_min) {
+                if (conflict_pair(c, e, &out[k])) k++;
+            } else if (e->end_min <= c->start_min) {
+                if (!prev || e->end_min > prev->end_min) prev = e;
+            } else if (!next || e->start_min < next->start_min) {
+                next = e;
+            }
         }
+        if (prev && k < max && conflict_pair(c, prev, &out[k])) k++;
+        if (next && k < max && conflict_pair(c, next, &out[k])) k++;
     }
-    free(day_occ);
+    free(buf);
     return k;
 }
 
