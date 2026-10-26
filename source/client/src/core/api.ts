@@ -72,6 +72,40 @@ export function useRequest<T = any>(cmd: string, data?: object, deps: unknown[] 
   return { ...state, reload }
 }
 
+// Lệnh danh sách có phân trang (server trả tối đa ~6 KB mỗi lần, kèm "next" nếu còn): gọi lần lượt các trang và
+// gộp mảng `key` lại. Dùng cho school.list, campus.list, holiday.list, subject.list, class.list, schedule.list, task.list.
+export async function requestAll<T = any>(cmd: string, key: string, data: object = {}): Promise<T[]> {
+  const items: T[] = []
+  let offset = 0
+  for (let page = 0; page < 100; page++) {
+    const r = await api.request<any>(cmd, { ...data, offset })
+    items.push(...((r?.[key] ?? []) as T[]))
+    if (typeof r?.next !== 'number' || r.next <= offset) break
+    offset = r.next
+  }
+  return items
+}
+
+// Như useRequest nhưng cho lệnh danh sách có phân trang: data là mảng đã gộp mọi trang
+export function useList<T = any>(cmd: string, key: string, reloadOn: string[] = []) {
+  const [state, setState] = useState<{ data: T[] | null; error: string | null; loading: boolean }>({
+    data: null,
+    error: null,
+    loading: true,
+  })
+  const reload = useCallback(() => {
+    setState((s) => ({ ...s, loading: true }))
+    requestAll<T>(cmd, key)
+      .then((d) => setState({ data: d, error: null, loading: false }))
+      .catch((e) => setState({ data: null, error: errorText(e), loading: false }))
+  }, [cmd, key])
+  useEffect(reload, [reload])
+  usePush((m) => {
+    if (reloadOn.includes(m.entity)) reload()
+  })
+  return { ...state, reload }
+}
+
 export function usePush(cb: (msg: PushMessage) => void): void {
   const ref = useRef(cb)
   ref.current = cb

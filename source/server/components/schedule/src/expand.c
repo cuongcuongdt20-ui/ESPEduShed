@@ -27,70 +27,46 @@ static void snapshot_free(schedule_snapshot_t *snap)
     memset(snap, 0, sizeof(*snap));
 }
 
+static bool owns_series(uint32_t series_id, uint16_t user_id)
+{
+    for (int i = 0; i < g_sched.n_series; ++i)
+        if (g_sched.series[i].id == series_id) return g_sched.series[i].owner_id == user_id;
+    return false;
+}
+
 /*
- * Read counts, allocate only the needed space, then copy under the lock.
- * If the schedule grows between the two lock acquisitions, fail safely.
+ * Chép ra bản riêng CHỈ dữ liệu của user_id (lịch, công việc của người đó và ngoại lệ thuộc lịch của người đó),
+ * trong một lần giữ khoá. Bản sao nhỏ theo dữ liệu một người, không phải toàn bộ ~100 KB của mọi người dùng.
  */
-static bool snapshot_load(schedule_snapshot_t *snap)
+static bool snapshot_load(schedule_snapshot_t *snap, uint16_t user_id)
 {
     memset(snap, 0, sizeof(*snap));
+    bool ok = true;
 
     ld_lock(g_sched_lock);
-    uint16_t ns = g_sched.n_series;
-    uint16_t nt = g_sched.n_tasks;
-    uint16_t ne = g_sched.n_exceptions;
-    ld_unlock(g_sched_lock);
-
-    if (ns > SCHED_MAX_SERIES ||
-        nt > SCHED_MAX_TASKS ||
-        ne > SCHED_MAX_EXCEPTIONS) {
-        return false;
-    }
+    int ns = 0, nt = 0, ne = 0;
+    for (int i = 0; i < g_sched.n_series; ++i) ns += g_sched.series[i].owner_id == user_id;
+    for (int i = 0; i < g_sched.n_tasks; ++i) nt += g_sched.tasks[i].owner_id == user_id;
+    for (int i = 0; i < g_sched.n_exceptions && ns; ++i) ne += owns_series(g_sched.exceptions[i].series_id, user_id);
 
     snap->series = ns ? malloc((size_t)ns * sizeof(*snap->series)) : NULL;
     snap->tasks = nt ? malloc((size_t)nt * sizeof(*snap->tasks)) : NULL;
-    snap->exceptions =
-        ne ? malloc((size_t)ne * sizeof(*snap->exceptions)) : NULL;
+    snap->exceptions = ne ? malloc((size_t)ne * sizeof(*snap->exceptions)) : NULL;
+    ok = !(ns && !snap->series) && !(nt && !snap->tasks) && !(ne && !snap->exceptions);
 
-    if ((ns && !snap->series) ||
-        (nt && !snap->tasks) ||
-        (ne && !snap->exceptions)) {
-        snapshot_free(snap);
-        return false;
+    if (ok) {
+        for (int i = 0; i < g_sched.n_series; ++i)
+            if (g_sched.series[i].owner_id == user_id) snap->series[snap->n_series++] = g_sched.series[i];
+        for (int i = 0; i < g_sched.n_tasks; ++i)
+            if (g_sched.tasks[i].owner_id == user_id) snap->tasks[snap->n_tasks++] = g_sched.tasks[i];
+        for (int i = 0; i < g_sched.n_exceptions && ns; ++i)
+            if (owns_series(g_sched.exceptions[i].series_id, user_id))
+                snap->exceptions[snap->n_exceptions++] = g_sched.exceptions[i];
     }
-
-    ld_lock(g_sched_lock);
-
-    if (g_sched.n_series > ns ||
-        g_sched.n_tasks > nt ||
-        g_sched.n_exceptions > ne ||
-        g_sched.n_series > SCHED_MAX_SERIES ||
-        g_sched.n_tasks > SCHED_MAX_TASKS ||
-        g_sched.n_exceptions > SCHED_MAX_EXCEPTIONS) {
-        ld_unlock(g_sched_lock);
-        snapshot_free(snap);
-        return false;
-    }
-
-    snap->n_series = g_sched.n_series;
-    snap->n_tasks = g_sched.n_tasks;
-    snap->n_exceptions = g_sched.n_exceptions;
-
-    if (snap->n_series) {
-        memcpy(snap->series, g_sched.series,
-               (size_t)snap->n_series * sizeof(*snap->series));
-    }
-    if (snap->n_tasks) {
-        memcpy(snap->tasks, g_sched.tasks,
-               (size_t)snap->n_tasks * sizeof(*snap->tasks));
-    }
-    if (snap->n_exceptions) {
-        memcpy(snap->exceptions, g_sched.exceptions,
-               (size_t)snap->n_exceptions * sizeof(*snap->exceptions));
-    }
-
     ld_unlock(g_sched_lock);
-    return true;
+
+    if (!ok) snapshot_free(snap);
+    return ok;
 }
 
 static bool series_occurs_on(const sched_series_t *s, int32_t day)
@@ -210,7 +186,7 @@ int sched_expand(
     }
 
     schedule_snapshot_t snap;
-    if (!snapshot_load(&snap)) return -1;
+    if (!snapshot_load(&snap, user_id)) return -1;
 
     int n = 0;
     bool overflow = false;

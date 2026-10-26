@@ -604,6 +604,11 @@ data,     data, spiffs,  ,       3M
 | `/data/users.json` | TV1 | Tài khoản: tên, vai trò, salt, key (PBKDF2), cờ phải đổi mật khẩu |
 | `/data/catalog.json` | TV2 | Trường, cơ sở, bảng tiết, ngày nghỉ, môn, lớp |
 | `/data/schedule.json` | TV3 | Lịch dạy, công việc, ngoại lệ |
+
+`catalog.json` và `schedule.json` lưu dạng **JSON Lines** (`schema: 2`): dòng đầu là header `{"schema":2,"nextId":..}`,
+mỗi dòng sau một bản ghi có trường `"k"` (loại bản ghi). Ghi và nạp từng dòng nên chỉ cần vài KB RAM; dựng cả file
+thành một cây JSON khi dữ liệu đầy cần hàng trăm KB, vượt RAM của ESP32 (đã đo). File dạng cũ (`schema: 1`, một object)
+vẫn đọc được. Mọi lần ghi đi qua task ghi riêng (`store_save_later`), gom thay đổi trong 1 giây và đổi tên nguyên tử.
 | `/data/conflict_ack.json` | TV4 | Xung đột người dùng đã xác nhận |
 | NVS `wifi`, `auth` | TV1 | Cấu hình Wi-Fi; mật khẩu admin ban đầu (xoá khi admin đổi mật khẩu) |
 

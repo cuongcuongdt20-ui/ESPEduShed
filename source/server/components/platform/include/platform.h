@@ -60,6 +60,13 @@ int ld_fail(cJSON *out, int code, const char *message, const char *field);
 void ld_push_changed(const char *entity, uint32_t id);                    // mọi client đã đăng nhập
 void ld_push_changed_user(uint16_t user_id, const char *entity, uint32_t id);   // chỉ các phiên của một người
 
+// ---------- phân trang cho lệnh trả danh sách (phản hồi phải dưới 8 KB)
+// Lệnh nhận {offset?}; thêm từng mục bằng ld_page_add, khi hết ngân sách thì dừng và ghi "next": chỉ số mục tiếp theo.
+// Client gọi lại với offset = next cho tới khi phản hồi không còn "next".
+#define LD_PAGE_BUDGET 6000
+int  ld_page_offset(const cJSON *data);                        // offset hợp lệ (>= 0), mặc định 0
+bool ld_page_add(cJSON *arr, cJSON *item, int *budget);        // false: hết chỗ, item đã bị xoá
+
 // ---------- đọc tham số trong "data" (trả false nếu thiếu hoặc sai kiểu)
 bool        ld_get_int(const cJSON *data, const char *key, int *out);
 bool        ld_get_bool(const cJSON *data, const char *key, bool *out);
@@ -68,6 +75,23 @@ const char *ld_get_str(const cJSON *data, const char *key);   // NULL nếu thi�
 // ---------- lưu trữ (LittleFS gắn ở /data)
 esp_err_t store_write_atomic(const char *path, const char *data, size_t len);   // ghi file tạm rồi đổi tên
 char     *store_read_all(const char *path, size_t *len);                         // caller free(); NULL nếu chưa có
+// Ghi và đọc file lớn theo từng dòng (JSON Lines) để không phải dựng cả file trong RAM.
+// Ghi: store_begin → store_put_line (mỗi dòng một bản ghi) → store_end(w, true) đổi tên nguyên tử như
+// store_write_atomic; store_end(w, false) bỏ file tạm, giữ nguyên file cũ.
+typedef struct store_writer store_writer_t;
+store_writer_t *store_begin(const char *path);                      // NULL nếu không mở được hoặc đang khôi phục
+bool            store_put_line(store_writer_t *w, const char *line);
+esp_err_t       store_end(store_writer_t *w, bool commit);
+// Đọc: store_open_lines (NULL nếu chưa có file) → store_next_line trả độ dài dòng (đã bỏ \r\n), 0 khi hết file,
+// -1 khi dòng dài hơn cap (dòng đó bị bỏ qua) → store_close_lines.
+typedef struct store_reader store_reader_t;
+store_reader_t *store_open_lines(const char *path);
+int             store_next_line(store_reader_t *r, char *buf, size_t cap);
+void            store_close_lines(store_reader_t *r);
+// Hẹn ghi: gọi fn sau 1 giây kể từ lần hẹn cuối cùng với cùng fn (gom nhiều thay đổi liên tiếp thành một lần ghi).
+// fn chạy trên task ghi riêng (stack 8 KB), không chạy trong handler hay callback esp_timer. Gọi được từ mọi task.
+typedef void (*store_save_fn)(void);
+void      store_save_later(store_save_fn fn);
 
 // ---------- thời gian (UTC+7)
 bool    time_is_synced(void);

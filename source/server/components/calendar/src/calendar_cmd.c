@@ -26,6 +26,7 @@ static cJSON *occ_json(const occurrence_t *o, const int *cf_idx, int n_cf, int *
     dt_format_hm(o->start_min, s);
     dt_format_hm(o->end_min, e);
     sched_label(o->source_id, o->kind, title, room, cls);
+    if (o->kind != OCC_TASK) sched_room_override(o->source_id, o->orig_day, room);   // buổi đổi phòng
     catalog_school_label(o->school_id, sn, color);
 
     cJSON *j = cJSON_CreateObject();
@@ -77,7 +78,7 @@ static bool is_side(const occurrence_t *o, const conflict_t *c)
 static int reply_range(const ld_ctx_t *ctx, int32_t from, int32_t to, cJSON *out)
 {
     occurrence_t *occ = malloc(sizeof(occurrence_t) * MAX_OCC);
-    conflict_t *cf = malloc(sizeof(conflict_t) * CONF_MAX);
+    conflict_t *cf = malloc(sizeof(conflict_t) * (CONF_MAX + 1));      // +1: biết còn xung đột bị bỏ hay không
     if (!occ || !cf) {
         free(occ);
         free(cf);
@@ -93,8 +94,11 @@ static int reply_range(const ld_ctx_t *ctx, int32_t from, int32_t to, cJSON *out
     int est_total = 0, k = 0;
     cJSON *items = cJSON_CreateArray();
     bool truncated = false;
-    int ncf = conflict_find_in(occ, n, cf, CONF_MAX);
-    if (ncf == CONF_MAX) truncated = true;
+    int ncf = conflict_find_in(occ, n, cf, CONF_MAX + 1);
+    if (ncf > CONF_MAX) {
+        truncated = true;
+        ncf = CONF_MAX;
+    }
     for (; k < n; k++) {
         int idx[CONF_MAX], m = 0;
         for (int c = 0; c < ncf; c++)
@@ -158,8 +162,9 @@ static bool parse_range(const cJSON *data, int32_t *from, int32_t *to, cJSON *ou
 // calendar.range {from, to}
 static int calendar_range(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
 {
-    int32_t from, to, err;
-    if (!parse_range(data, &from, &to, out, (int *) &err)) return (int) err;
+    int32_t from, to;
+    int err;
+    if (!parse_range(data, &from, &to, out, &err)) return err;
     return reply_range(ctx, from, to, out);
 }
 
@@ -193,7 +198,7 @@ static int conflict_list(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
         to = from + 6;
     }
     occurrence_t *occ = malloc(sizeof(occurrence_t) * MAX_OCC);
-    conflict_t *cf = malloc(sizeof(conflict_t) * LIST_MAX);
+    conflict_t *cf = malloc(sizeof(conflict_t) * (LIST_MAX + 1));      // +1: biết còn xung đột bị bỏ hay không
     if (!occ || !cf) {
         free(occ);
         free(cf);
@@ -215,7 +220,11 @@ static int conflict_list(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
             free(cf);
             return ld_fail(out, LD_ERR_INTERNAL, "Qua nhieu buoi trong mot doan 14 ngay", NULL);
         }
-        int k = conflict_find_in(occ, n, cf, LIST_MAX - total);
+        int k = conflict_find_in(occ, n, cf, LIST_MAX - total + 1);
+        if (total + k > LIST_MAX) {
+            truncated = true;
+            k = LIST_MAX - total;
+        }
         for (int i = 0; i < k; i++) {
             cJSON *j = conflict_json(&cf[i]);
             cJSON_DeleteItemFromObject(j, "a");
@@ -225,7 +234,6 @@ static int conflict_list(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
             cJSON_AddItemToArray(arr, j);
         }
         total += k;
-        if (total >= LIST_MAX) truncated = true;
     }
     if (truncated) cJSON_AddBoolToObject(out, "truncated", true);
     free(occ);
@@ -234,7 +242,8 @@ static int conflict_list(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
 }
 
 // conflict.check: kiểm tra một bản nháp, không lưu gì.
-//   cách 1 (dời một buổi có sẵn): {sourceId, kind?, origDate, date, start, end}
+//   cách 1 (dời một buổi có sẵn): {sourceId, kind?, origDate, curDate?, date, start, end}
+//          curDate = ngày buổi đang nằm (khác origDate khi buổi đã bị dời hoặc là buổi dạy bù); mặc định origDate
 //   cách 2 (buổi mới):            {date, start, end, schoolId?, campusId?, ignoreSourceId?}
 // → {conflicts: [{with: {sourceId, kind, title, start, end}, date, start, end, reason}]}
 static int conflict_check_cmd(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
@@ -250,13 +259,21 @@ static int conflict_check_cmd(const ld_ctx_t *ctx, const cJSON *data, cJSON *out
     uint32_t ignore = 0;
     int sid;
     if (ld_get_int(data, "sourceId", &sid)) {
-        int32_t orig;
+        int32_t orig, cur;
+        int kind = 0;
         if (!dt_parse_date(ld_get_str(data, "origDate"), &orig)) return ld_fail(out, LD_ERR_BAD_ARG, "Thieu hoac sai origDate", "origDate");
+        const char *cur_s = ld_get_str(data, "curDate");
+        if (!cur_s) cur = orig;
+        else if (!dt_parse_date(cur_s, &cur)) return ld_fail(out, LD_ERR_BAD_ARG, "Sai curDate", "curDate");
+        ld_get_int(data, "kind", &kind);
         occurrence_t *one = malloc(sizeof(occurrence_t) * 64);
         if (!one) return ld_fail(out, LD_ERR_INTERNAL, "Het bo nho", NULL);
-        int n = sched_expand(ctx->user_id, orig, orig, one, 64), found = -1;
+        // Tìm buổi ở ngày nó đang nằm; buổi dạy bù và buổi gốc (đã huỷ) cùng orig_day thì phân biệt bằng kind
+        int n = sched_expand(ctx->user_id, cur, cur, one, 64), found = -1;
         for (int i = 0; i < n; i++)
-            if (one[i].source_id == (uint32_t) sid && one[i].orig_day == orig) found = i;
+            if (one[i].source_id == (uint32_t) sid && one[i].orig_day == orig && (kind == 0 || one[i].kind == kind)
+                && one[i].status != OCC_CANCELLED)
+                found = i;
         if (found < 0) {
             free(one);
             return ld_fail(out, LD_ERR_NOT_FOUND, "Khong tim thay buoi", "sourceId");   // cũng là kết quả khi buổi của người khác
@@ -286,7 +303,8 @@ static int conflict_check_cmd(const ld_ctx_t *ctx, const cJSON *data, cJSON *out
         dt_format_hm(cf[i].overlap_end, ce);
         // bên "khác" là buổi không phải ứng viên (conflict_check đã bỏ buổi cùng source_id)
         const occurrence_t *other = cf[i].a.start_min == cand.start_min && cf[i].a.end_min == cand.end_min &&
-                                            cf[i].a.source_id == cand.source_id
+                                            cf[i].a.source_id == cand.source_id && cf[i].a.day == cand.day &&
+                                            cf[i].a.orig_day == cand.orig_day
                                         ? &cf[i].b
                                         : &cf[i].a;
         cJSON *j = cJSON_CreateObject();

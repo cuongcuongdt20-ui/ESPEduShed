@@ -5,6 +5,7 @@ import type { Role } from '../../../electron/shared'
 import { api, errorText, useRequest } from '../api'
 import { useSession } from '../session'
 import { useToast } from '../components/toast'
+import { useConfirm } from '../components/confirm'
 import { Button } from '../components/ui/button'
 import { Badge, Card, CardContent, CardHeader, CardTitle, Table, Td, Th } from '../components/ui/card'
 import { Input, Label, Select } from '../components/ui/input'
@@ -21,6 +22,7 @@ const ROLE_TEXT: Record<Role, string> = { admin: 'Quản trị', teacher: 'Giả
 export function UsersPage() {
   const s = useSession()
   const toast = useToast()
+  const confirm = useConfirm()
   const { data, error, reload } = useRequest<{ users: UserRow[] }>('auth.users', undefined, [], ['user'])
   const [name, setName] = useState('')
   const [role, setRole] = useState<Role>('teacher')
@@ -60,7 +62,7 @@ export function UsersPage() {
   }
 
   async function remove(u: UserRow) {
-    if (!window.confirm(`Xoá tài khoản ${u.name}?`)) return
+    if (!(await confirm(`Xoá tài khoản ${u.name}?`))) return
     try {
       await api.request('auth.remove', { user: u.name })
       toast.ok(`Đã xoá ${u.name}`)

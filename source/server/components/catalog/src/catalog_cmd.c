@@ -147,7 +147,14 @@ static int school_list(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
 {
     cJSON *arr = cJSON_AddArrayToObject(out, "schools");
     ld_lock(g_cat_lock);
-    for (int i = 0; i < g_cat.n_schools; i++) cJSON_AddItemToArray(arr, school_json(&g_cat.schools[i]));
+    int budget = LD_PAGE_BUDGET;
+    for (int i = ld_page_offset(data); i < g_cat.n_schools; i++) {
+        cJSON *o = school_json(&g_cat.schools[i]);
+        if (!ld_page_add(arr, o, &budget)) {
+            cJSON_AddNumberToObject(out, "next", i);
+            break;
+        }
+    }
     ld_unlock(g_cat_lock);
     return LD_OK;
 }
@@ -293,7 +300,8 @@ static int campus_list(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
     ld_get_int(data, "schoolId", &sid);
     cJSON *arr = cJSON_AddArrayToObject(out, "campuses");
     ld_lock(g_cat_lock);
-    for (int i = 0; i < g_cat.n_campuses; i++) {
+    int budget = LD_PAGE_BUDGET;
+    for (int i = ld_page_offset(data); i < g_cat.n_campuses; i++) {
         const cat_campus_t *c = &g_cat.campuses[i];
         if (sid > 0 && c->school_id != sid) continue;
         cJSON *o = cJSON_CreateObject();
@@ -301,7 +309,10 @@ static int campus_list(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
         cJSON_AddNumberToObject(o, "schoolId", c->school_id);
         cJSON_AddStringToObject(o, "name", c->name);
         cJSON_AddStringToObject(o, "address", c->address);
-        cJSON_AddItemToArray(arr, o);
+        if (!ld_page_add(arr, o, &budget)) {
+            cJSON_AddNumberToObject(out, "next", i);
+            break;
+        }
     }
     ld_unlock(g_cat_lock);
     return LD_OK;
@@ -382,7 +393,8 @@ static int holiday_list(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
     ld_get_int(data, "schoolId", &sid);
     cJSON *arr = cJSON_AddArrayToObject(out, "holidays");
     ld_lock(g_cat_lock);
-    for (int i = 0; i < g_cat.n_holidays; i++) {
+    int budget = LD_PAGE_BUDGET;
+    for (int i = ld_page_offset(data); i < g_cat.n_holidays; i++) {
         const cat_holiday_t *h = &g_cat.holidays[i];
         if (sid > 0 && h->school_id != 0 && h->school_id != sid) continue;
         char a[11], b[11];
@@ -394,7 +406,10 @@ static int holiday_list(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
         cJSON_AddStringToObject(o, "name", h->name);
         cJSON_AddStringToObject(o, "fromDate", a);
         cJSON_AddStringToObject(o, "toDate", b);
-        cJSON_AddItemToArray(arr, o);
+        if (!ld_page_add(arr, o, &budget)) {
+            cJSON_AddNumberToObject(out, "next", i);
+            break;
+        }
     }
     ld_unlock(g_cat_lock);
     return LD_OK;
@@ -463,14 +478,18 @@ static int subject_list(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
 {
     cJSON *arr = cJSON_AddArrayToObject(out, "subjects");
     ld_lock(g_cat_lock);
-    for (int i = 0; i < g_cat.n_subjects; i++) {
+    int budget = LD_PAGE_BUDGET;
+    for (int i = ld_page_offset(data); i < g_cat.n_subjects; i++) {
         const cat_subject_t *s = &g_cat.subjects[i];
         cJSON *o = cJSON_CreateObject();
         cJSON_AddNumberToObject(o, "id", s->id);
         cJSON_AddStringToObject(o, "code", s->code);
         cJSON_AddStringToObject(o, "name", s->name);
         cJSON_AddNumberToObject(o, "credits", s->credits);
-        cJSON_AddItemToArray(arr, o);
+        if (!ld_page_add(arr, o, &budget)) {
+            cJSON_AddNumberToObject(out, "next", i);
+            break;
+        }
     }
     ld_unlock(g_cat_lock);
     return LD_OK;
@@ -546,7 +565,8 @@ static int class_list(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
     ld_get_int(data, "schoolId", &sid);
     cJSON *arr = cJSON_AddArrayToObject(out, "classes");
     ld_lock(g_cat_lock);
-    for (int i = 0; i < g_cat.n_classes; i++) {
+    int budget = LD_PAGE_BUDGET;
+    for (int i = ld_page_offset(data); i < g_cat.n_classes; i++) {
         const cat_class_t *c = &g_cat.classes[i];
         if (sid > 0 && c->school_id != sid) continue;
         cJSON *o = cJSON_CreateObject();
@@ -555,7 +575,10 @@ static int class_list(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
         cJSON_AddNumberToObject(o, "subjectId", c->subject_id);
         cJSON_AddNumberToObject(o, "schoolId", c->school_id);
         cJSON_AddNumberToObject(o, "size", c->size);
-        cJSON_AddItemToArray(arr, o);
+        if (!ld_page_add(arr, o, &budget)) {
+            cJSON_AddNumberToObject(out, "next", i);
+            break;
+        }
     }
     ld_unlock(g_cat_lock);
     return LD_OK;

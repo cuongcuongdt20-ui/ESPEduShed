@@ -4,7 +4,7 @@
 #include <string.h>
 #include "cJSON.h"
 #include "esp_log.h"
-#include "esp_timer.h"
+
 #include "platform.h"
 #include "calendar_internal.h"
 #include "dt.h"
@@ -13,7 +13,6 @@
 #define KEEP_DAYS 14           // xác nhận của ngày đã qua quá 14 ngày thì bỏ
 
 static const char *TAG = "calendar";
-static esp_timer_handle_t s_timer;
 
 void calendar_acks_load(void)
 {
@@ -54,9 +53,8 @@ static void purge_old(void)
     g_n_acks = k;
 }
 
-static void save_now(void *arg)
+static void save_now(void)
 {
-    (void) arg;
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "schema", 1);
     cJSON *arr = cJSON_AddArrayToObject(root, "acks");
@@ -80,15 +78,10 @@ static void save_now(void *arg)
     }
 }
 
-// Gom thay đổi: ghi flash sau 1 giây kể từ thay đổi cuối (README A8)
+// Gom thay đổi: ghi flash sau 1 giây kể từ thay đổi cuối (README A8), trên task ghi của platform
 void calendar_acks_mark_dirty(void)
 {
-    if (!s_timer) {
-        esp_timer_create_args_t args = {.callback = save_now, .name = "calendar_ack_save"};
-        esp_timer_create(&args, &s_timer);
-    }
-    esp_timer_stop(s_timer);
-    esp_timer_start_once(s_timer, 1000 * 1000);
+    store_save_later(save_now);
 }
 
 bool calendar_ack_add(uint32_t a, uint32_t b, int32_t day)

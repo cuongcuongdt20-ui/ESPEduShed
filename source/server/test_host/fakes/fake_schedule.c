@@ -27,6 +27,14 @@ bool sched_label(uint32_t source_id, uint8_t kind, char title[65], char room[17]
     return true;
 }
 
+bool sched_room_override(uint32_t source_id, int32_t orig_day, char room[17])
+{
+    (void) source_id;
+    (void) orig_day;
+    (void) room;
+    return false;
+}
+
 bool sched_uses_school(uint16_t school_id)
 {
     (void) school_id;
