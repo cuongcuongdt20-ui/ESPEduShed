@@ -148,7 +148,7 @@ export function CalendarPage() {
 
   function onClick(arg: EventClickArg) {
     const it = arg.event.extendedProps.item as Item
-    openScheduleEditor(it.sourceId, it.kind, it.origDate)
+    openScheduleEditor(it.sourceId, it.kind, it.origDate, it.date)
   }
 
   function onSelect(arg: DateSelectArg) {
