@@ -32,7 +32,7 @@ static size_t put_frame(uint8_t *buf, const char *json)
     return 4 + n;
 }
 
-static frame_rx_t rx;          // 8 KB: để tĩnh, không đặt trên stack
+static frame_rx_t rx;
 
 TEST(mot_khung_nguyen_ven)
 {
@@ -110,6 +110,50 @@ TEST(khung_qua_dai_hoac_rong_bi_tu_choi)
     frame_reset(&rx);
     CHECK_EQ(frame_feed(&rx, head, 4, collect, &s), -1);
     CHECK_EQ(s.count, 0);
+    CHECK(rx.buf == NULL);
+}
+
+TEST(bo_dem_chi_giu_khi_nhan_do_khung)
+{
+    // Kết nối rảnh không giữ bộ đệm; nhận dở thì giữ; đủ khung thì trả lại
+    uint8_t buf[64];
+    size_t n = put_frame(buf, "{\"id\":1}");
+    sink_t s = {0};
+    frame_reset(&rx);
+    CHECK(rx.buf == NULL);
+    CHECK_EQ(frame_feed(&rx, buf, 3, collect, &s), 0);         // mới có 3 byte độ dài
+    CHECK(rx.buf == NULL);
+    CHECK_EQ(frame_feed(&rx, buf + 3, 4, collect, &s), 0);     // đủ độ dài + 3 byte nội dung
+    CHECK(rx.buf != NULL);
+    CHECK_EQ(rx.need, 8);
+    CHECK_EQ(frame_feed(&rx, buf + 7, n - 7, collect, &s), 0);
+    CHECK_EQ(s.count, 1);
+    CHECK(rx.buf == NULL);
+    // Bỏ dở giữa khung (client ngắt kết nối): frame_reset giải phóng bộ đệm
+    CHECK_EQ(frame_feed(&rx, buf, 6, collect, &s), 0);
+    CHECK(rx.buf != NULL);
+    frame_reset(&rx);
+    CHECK(rx.buf == NULL);
+    CHECK_EQ(rx.head_have, 0);
+}
+
+static int close_on_first(void *user, char *payload, uint32_t len)
+{
+    // Giống tcp_server khi handler đóng kết nối: xoá rx (ở đây gọi frame_reset rồi memset) và yêu cầu dừng
+    frame_rx_t *r = user;
+    frame_reset(r);
+    memset(r, 0, sizeof(*r));
+    return strcmp(payload, "{\"id\":1}") == 0 ? 1 : 0;
+}
+
+TEST(callback_dong_ket_noi_giua_cac_khung_dinh)
+{
+    uint8_t buf[64];
+    size_t n = put_frame(buf, "{\"id\":1}");
+    n += put_frame(buf + n, "{\"id\":2}");
+    frame_reset(&rx);
+    CHECK_EQ(frame_feed(&rx, buf, n, close_on_first, &rx), 1);  // dừng ngay sau khung 1, không đọc khung 2
+    CHECK(rx.buf == NULL);
 }
 
 // ---------- phiên đăng nhập
@@ -189,6 +233,8 @@ int main(void)
     RUN(khung_dinh_va_cat_lan_lon);
     RUN(khung_lon_nhat_8kb);
     RUN(khung_qua_dai_hoac_rong_bi_tu_choi);
+    RUN(bo_dem_chi_giu_khi_nhan_do_khung);
+    RUN(callback_dong_ket_noi_giua_cac_khung_dinh);
     RUN(phien_tao_tra_huy);
     RUN(phien_day_thay_phien_sap_het_han);
     RUN(sai_5_lan_bi_chan_60_giay);

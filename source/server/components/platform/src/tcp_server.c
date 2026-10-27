@@ -2,7 +2,7 @@
 //
 // Vì sao select() thay vì một task cho mỗi client: mỗi task FreeRTOS cần stack riêng (8–12 KB để chạy cJSON),
 // 8 client sẽ tốn gần 100 KB RAM chỉ cho stack. Với select(), một task duy nhất chờ đồng thời trên mọi socket,
-// RAM thêm cho mỗi client chỉ là bộ đệm ghép khung (8 KB, cấp phát khi kết nối) và hàng đợi gửi.
+// RAM thêm cho mỗi client chỉ là bộ đệm ghép khung (cấp đúng độ dài khi đang nhận dở một khung) và hàng đợi gửi.
 // Các handler lệnh vì thế cũng chạy tuần tự trong task này, nên dữ liệu của server không bị hai client sửa cùng lúc.
 #include <errno.h>
 #include <fcntl.h>
@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "esp_log.h"
+#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -36,7 +37,7 @@ typedef struct {
     int            sock;                   // -1: ô trống
     uint32_t       ip;
     uint16_t       port;
-    frame_rx_t    *rx;
+    frame_rx_t     rx;                     // bộ đệm khung chỉ được cấp khi đang nhận dở một khung
     out_node_t    *head, *tail;
     size_t         out_bytes;
     int64_t        connected_ms, last_rx_ms;
@@ -69,7 +70,7 @@ static void client_close(int i, const char *why)
     ESP_LOGI(TAG, "dong client #%d %s:%u (%s)", i, ip, c->port, why);
     shutdown(c->sock, SHUT_RDWR);
     close(c->sock);
-    free(c->rx);
+    frame_reset(&c->rx);
     for (out_node_t *n = c->head; n;) {
         out_node_t *next = n->next;
         free(n);
@@ -93,7 +94,11 @@ bool tcp_client_send(int i, const char *json)
         return false;
     }
     out_node_t *n = malloc(sizeof(out_node_t) + 4 + len);
-    if (!n) return false;
+    if (!n) {
+        ESP_LOGW(TAG, "het RAM, bo phan hoi %u byte cho client #%d (heap trong %u)", (unsigned) len, i,
+                 (unsigned) esp_get_free_heap_size());
+        return false;
+    }
     n->next = NULL;
     n->len = 4 + len;
     n->sent = 0;
@@ -202,9 +207,15 @@ static void read_client(int i)
         }
         c->last_rx_ms = ld_now_ms();
         int idx = i;
-        int r = frame_feed(c->rx, buf, (size_t) n, on_frame, &idx);
-        if (r < 0) {
+        int r = frame_feed(&c->rx, buf, (size_t) n, on_frame, &idx);
+        if (r == FRAME_ERR_BAD) {
             client_close(i, "khung sai do dai, luong byte da lech");
+            return;
+        }
+        if (r == FRAME_ERR_NOMEM) {
+            ESP_LOGW(TAG, "het RAM khi nhan khung %u byte (heap trong %u)", (unsigned) c->rx.need,
+                     (unsigned) esp_get_free_heap_size());
+            client_close(i, "het RAM");
             return;
         }
         if (r > 0) return;
@@ -231,9 +242,8 @@ static void accept_client(void)
             break;
         }
     }
-    frame_rx_t *rx = slot >= 0 ? malloc(sizeof(frame_rx_t)) : NULL;
-    if (!rx) {
-        // Hết chỗ (hoặc hết RAM): báo BUSY rồi đóng ngay, không giữ kết nối
+    if (slot < 0) {
+        // Hết chỗ: báo BUSY rồi đóng ngay, không giữ kết nối
         static const char busy[] =
             "{\"id\":0,\"ok\":false,\"error\":{\"code\":\"BUSY\",\"message\":\"Server da du ket noi\",\"field\":null}}";
         uint8_t head[4];
@@ -261,8 +271,6 @@ static void accept_client(void)
     c->sock = s;
     c->ip = addr.sin_addr.s_addr;
     c->port = ntohs(addr.sin_port);
-    c->rx = rx;
-    frame_reset(rx);
     c->connected_ms = c->last_rx_ms = ld_now_ms();
     char ip[16];
     ip_str(c->ip, ip);
