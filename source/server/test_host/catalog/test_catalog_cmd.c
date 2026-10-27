@@ -50,7 +50,8 @@ bool ld_get_int(const cJSON *data, const char *key, int *out)
 {
     const cJSON *v = cJSON_GetObjectItemCaseSensitive(data, key);
     if (!cJSON_IsNumber(v)) return false;
-    *out = v->valueint;
+    if (v->valuedouble != (double) (int) v->valuedouble) return false;   // giống protocol.c: không nhận số thực
+    *out = (int) v->valuedouble;
     return true;
 }
 

@@ -50,7 +50,8 @@ bool ld_get_int(const cJSON *data, const char *key, int *out)
 {
     const cJSON *v = cJSON_GetObjectItemCaseSensitive(data, key);
     if (!cJSON_IsNumber(v)) return false;
-    *out = v->valueint;
+    if (v->valuedouble != (double) (int) v->valuedouble) return false;   // giống protocol.c: không nhận số thực
+    *out = (int) v->valuedouble;
     return true;
 }
 
@@ -609,6 +610,97 @@ TEST(schedule_update_removes_stale_exceptions)
     cJSON_Delete(out);
 }
 
+TEST(update_keeps_optional_fields_not_sent)
+{
+    reset_fixture();
+    cJSON *out = cJSON_CreateObject();
+    CHECK_EQ(invoke("schedule.create", 42,
+                    "{\"subject_code\":\"CS101\",\"subject_name\":\"Lap trinh\","
+                    "\"school_id\":1,\"date_from\":\"2026-11-02\","
+                    "\"date_to\":\"2026-11-09\",\"day_of_week\":1,"
+                    "\"time_mode\":0,\"period_start\":3,\"period_count\":2,"
+                    "\"class_id\":5,\"credits\":3,\"size\":40}", out),
+             LD_OK);
+    cJSON_Delete(out);
+
+    // Form sửa không gửi class_id, credits, size: phải giữ giá trị cũ, không về 0
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("schedule.update", 42,
+                    "{\"id\":1,\"subject_code\":\"CS102\",\"subject_name\":\"Lap trinh\","
+                    "\"school_id\":1,\"date_from\":\"2026-11-02\","
+                    "\"date_to\":\"2026-11-09\",\"day_of_week\":1,"
+                    "\"time_mode\":0,\"period_start\":3,\"period_count\":2}", out),
+             LD_OK);
+    CHECK(strcmp(g_sched.series[0].subject_code, "CS102") == 0);
+    CHECK_EQ(g_sched.series[0].class_id, 5);
+    CHECK_EQ(g_sched.series[0].credits, 3);
+    CHECK_EQ(g_sched.series[0].size, 40);
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("task.create", 15,
+                    "{\"title\":\"Hop\",\"day\":\"2026-11-03\",\"start\":\"10:00\","
+                    "\"end\":\"11:00\",\"campus_id\":2,\"status\":1}", out),
+             LD_OK);
+    uint32_t tid = (uint32_t) item(out, "id")->valueint;
+    cJSON_Delete(out);
+
+    char req[160];
+    snprintf(req, sizeof(req),
+             "{\"id\":%u,\"title\":\"Hop khoa\",\"day\":\"2026-11-03\",\"start\":\"10:00\",\"end\":\"11:30\"}",
+             (unsigned) tid);
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("task.update", 15, req, out), LD_OK);
+    CHECK_EQ(g_sched.tasks[0].campus_id, 2);
+    CHECK_EQ(g_sched.tasks[0].status, 1);
+    CHECK_EQ(g_sched.tasks[0].end_min, 11 * 60 + 30);
+    cJSON_Delete(out);
+}
+
+TEST(fractional_optional_values_are_rejected)
+{
+    reset_fixture();
+    cJSON *out = cJSON_CreateObject();
+    CHECK_EQ(invoke("schedule.create", 42,
+                    "{\"subject_code\":\"CS101\",\"subject_name\":\"Lap trinh\","
+                    "\"school_id\":1,\"date_from\":\"2026-11-02\","
+                    "\"date_to\":\"2026-11-09\",\"day_of_week\":1,"
+                    "\"time_mode\":0,\"period_start\":3,\"period_count\":2,"
+                    "\"credits\":2.5}", out),
+             LD_ERR_BAD_ARG);
+    const cJSON *field = item(out, "_field");
+    CHECK(field && strcmp(field->valuestring, "credits") == 0);
+    CHECK_EQ(g_sched.n_series, 0);
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("task.create", 15,
+                    "{\"title\":\"X\",\"day\":\"2026-11-02\",\"start\":\"10:00\","
+                    "\"end\":\"11:00\",\"campus_id\":1.5}", out),
+             LD_ERR_BAD_ARG);
+    field = item(out, "_field");
+    CHECK(field && strcmp(field->valuestring, "campus_id") == 0);
+    CHECK_EQ(g_sched.n_tasks, 0);
+    cJSON_Delete(out);
+}
+
+TEST(schedule_get_omits_time_when_periods_missing)
+{
+    reset_fixture();
+    cJSON *out = cJSON_CreateObject();
+    CHECK_EQ(invoke("schedule.create", 42, valid_schedule, out), LD_OK);
+    cJSON_Delete(out);
+    g_sched.series[0].first_period = 9;            // bảng tiết của trường không còn tiết 9-10
+
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("schedule.get", 42, "{\"id\":1}", out), LD_OK);
+    const cJSON *s = item(out, "schedule");
+    CHECK(cJSON_IsObject(s));
+    CHECK(item(s, "start") == NULL);               // không trả 00:00
+    CHECK(item(s, "end") == NULL);
+    cJSON_Delete(out);
+}
+
 int main(void)
 {
     RUN(command_roles_are_registered);
@@ -629,5 +721,8 @@ int main(void)
     RUN(exception_move_emits_at_new_date);
     RUN(task_update_enforces_owner);
     RUN(schedule_update_removes_stale_exceptions);
+    RUN(update_keeps_optional_fields_not_sent);
+    RUN(fractional_optional_values_are_rejected);
+    RUN(schedule_get_omits_time_when_periods_missing);
     return REPORT();
 }

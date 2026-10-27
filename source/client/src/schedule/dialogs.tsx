@@ -350,8 +350,8 @@ const EXC_ACTIONS = [
   { type: 5, label: 'Huỷ buổi này và dạy bù' },
 ]
 
-function OccurrenceDialog({ sourceId, origDate, date, onClose }: {
-  sourceId: number; origDate: string; date?: string; onClose: () => void
+function OccurrenceDialog({ sourceId, origDate, date, kind, onClose }: {
+  sourceId: number; origDate: string; date?: string; kind?: number; onClose: () => void
 }) {
   const toast = useToast()
   const [s, setS] = useState<Row | null>(null)
@@ -365,17 +365,19 @@ function OccurrenceDialog({ sourceId, origDate, date, onClose }: {
     let alive = true
     Promise.all([
       api.request<Row>('schedule.get', { id: sourceId }),
-      api.request<Row>('occurrence.range', { from: visibleDate, to: visibleDate }).catch(() => ({ items: [] })),
+      api.request<Row>('occurrence.range', { from: visibleDate, to: visibleDate }),
     ]).then(([r, range]) => {
       if (!alive) return
       setS(r.schedule)
-      // Giờ thực của buổi (đã áp dụng ngoại lệ); lịch theo tiết không có sẵn giờ trong quy tắc.
-      const occ = (range.items ?? []).find((x: Row) => x.sourceId === sourceId && x.origDate === origDate)
-      if (occ) setF((x) => ({ ...x, new_start: occ.start, new_end: occ.end }))
-      else if (r.schedule.time_mode === 1) setF((x) => ({ ...x, new_start: r.schedule.start, new_end: r.schedule.end }))
+      // Giờ thực của buổi (đã áp dụng ngoại lệ). Buổi gốc đã huỷ và buổi dạy bù cùng ngày có chung sourceId,
+      // origDate nên phân biệt thêm bằng ngày đang hiện và kind.
+      const occ = (range.items ?? []).find((x: Row) => x.sourceId === sourceId && x.origDate === origDate
+        && x.date === visibleDate && (kind === undefined || x.kind === kind))
+      const slot = occ ?? r.schedule
+      if (slot.start && slot.end) setF((x) => ({ ...x, new_start: slot.start, new_end: slot.end }))
     }).catch((e) => { if (alive) setError(errorText(e)) })
     return () => { alive = false }
-  }, [sourceId, origDate, visibleDate])
+  }, [sourceId, origDate, visibleDate, kind])
 
   async function save(force = false) {
     setConflicts(null)
@@ -457,5 +459,8 @@ export function ScheduleDialogHost() {
   if (req.mode === 'series' && !req.id && !hasRole('teacher')) return <TaskForm key="task-new" prefill={req.prefill} onClose={close} />
   if (req.mode === 'series') return <SeriesForm key={`series-${req.id ?? 'new'}`} id={req.id} prefill={req.prefill} onClose={close} />
   if (req.mode === 'task') return <TaskForm key={`task-${req.id ?? 'new'}`} id={req.id} prefill={req.prefill} onClose={close} />
-  return <OccurrenceDialog key={`occ-${req.sourceId}-${req.origDate}-${req.date ?? ''}`} sourceId={req.sourceId} origDate={req.origDate} date={req.date} onClose={close} />
+  return (
+    <OccurrenceDialog key={`occ-${req.sourceId}-${req.origDate}-${req.date ?? ''}-${req.kind ?? ''}`}
+      sourceId={req.sourceId} origDate={req.origDate} date={req.date} kind={req.kind} onClose={close} />
+  )
 }

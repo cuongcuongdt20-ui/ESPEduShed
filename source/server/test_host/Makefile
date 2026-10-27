@@ -17,8 +17,16 @@ CFLAGS := -std=c11 -Wall -Wextra -Wno-unused-parameter -g -Icommon -Ifakes \
 B := build
 C := ../components
 
-.PHONY: all platform catalog catalog_cmd schedule schedule_cmd schedule_store calendar calendar_cmd clean
-all: platform catalog catalog_cmd schedule schedule_cmd schedule_store calendar calendar_cmd
+# cJSON nằm trong ESP-IDF: lấy theo IDF_PATH (export.ps1 / export.sh của ESP-IDF đặt sẵn), hoặc đặt CJSON_DIR.
+# Không tìm thấy thì `make` vẫn chạy 4 bộ test không cần cJSON và báo bỏ qua 4 bộ còn lại.
+CJSON_DIR ?= $(IDF_PATH)/components/json/cJSON
+CJSON_SUITES := catalog_cmd schedule_cmd schedule_store calendar_cmd
+
+.PHONY: all platform catalog catalog_cmd schedule schedule_cmd schedule_store calendar calendar_cmd cjson_missing clean
+all: platform catalog schedule calendar $(if $(wildcard $(CJSON_DIR)/cJSON.c),$(CJSON_SUITES),cjson_missing)
+
+cjson_missing:
+	@echo "Bo qua $(CJSON_SUITES): khong thay $(CJSON_DIR)/cJSON.c. Chay export cua ESP-IDF hoac dat CJSON_DIR=<thu muc cJSON>."
 
 platform: $(B)/test_platform
 	./$(B)/test_platform
@@ -58,10 +66,6 @@ $(B):
 clean:
 	rm -rf $(B)
 
-# cJSON nằm trong ESP-IDF. Đặt IDF_PATH (hoặc CJSON_DIR) nếu cài ở chỗ khác.
-IDF_PATH ?= D:/.espressif/v5.5.6/esp-idf
-CJSON_DIR ?= $(IDF_PATH)/components/json/cJSON
-
 $(B)/test_catalog_cmd: catalog/test_catalog_cmd.c \
                         $(C)/catalog/src/catalog_cmd.c \
                         $(C)/catalog/src/catalog_core.c \
@@ -91,4 +95,4 @@ $(B)/test_schedule_cmd: schedule/test_schedule_cmd.c \
                         $(C)/catalog/src/dt.c \
                         fakes/fake_catalog.c \
                         $(CJSON_DIR)/cJSON.c | $(B)
-		$(CC) $(CFLAGS) -Ifakes -I$(CJSON_DIR) $^ -o $@
+		$(CC) $(CFLAGS) -I$(CJSON_DIR) $^ -o $@

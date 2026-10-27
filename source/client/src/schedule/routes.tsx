@@ -56,7 +56,7 @@ function SchedulesPage() {
             <Button size="sm" onClick={() => openEditor({ mode: 'series' })}><Plus className="h-4 w-4" /> Thêm lịch dạy</Button>
           </CardHeader>
           <CardContent>
-            {series.loading && <p className="mb-2 text-sm text-muted-foreground">Đang tải lịch dạy…</p>}
+            {series.loading && !series.data && <p className="mb-2 text-sm text-muted-foreground">Đang tải lịch dạy…</p>}
             {series.error && <p className="mb-2 text-sm text-destructive">{series.error}</p>}
             <Table
               headers={['Học phần', 'Lớp', 'Trường', 'Thứ', 'Giờ', 'Phòng', 'Thời gian áp dụng']}
@@ -83,7 +83,7 @@ function SchedulesPage() {
           <Button size="sm" onClick={() => openEditor({ mode: 'task' })}><Plus className="h-4 w-4" /> Thêm công việc</Button>
         </CardHeader>
         <CardContent>
-          {tasks.loading && <p className="mb-2 text-sm text-muted-foreground">Đang tải công việc…</p>}
+          {tasks.loading && !tasks.data && <p className="mb-2 text-sm text-muted-foreground">Đang tải công việc…</p>}
           {tasks.error && <p className="mb-2 text-sm text-destructive">{tasks.error}</p>}
           <Table
             headers={['Công việc', 'Loại', 'Ngày', 'Giờ', 'Lặp', 'Trạng thái']}

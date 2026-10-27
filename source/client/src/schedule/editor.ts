@@ -4,7 +4,7 @@
 export type EditorRequest =
   | { mode: 'series'; id?: number; prefill?: Record<string, unknown> }       // lịch dạy: thêm mới hoặc sửa cả chuỗi
   | { mode: 'task'; id?: number; prefill?: Record<string, unknown> }         // công việc
-  | { mode: 'occurrence'; sourceId: number; origDate: string; date?: string } // một buổi: huỷ, đổi phòng, đổi giờ, dời, bù
+  | { mode: 'occurrence'; sourceId: number; origDate: string; date?: string; kind?: number } // một buổi: huỷ, đổi phòng, đổi giờ, dời, bù
 
 type Listener = (req: EditorRequest) => void
 const listeners = new Set<Listener>()
@@ -24,7 +24,7 @@ export function openEditor(req: EditorRequest): void {
  *  date: ngày buổi đang diễn ra trên lịch (khác origDate khi buổi đã bị dời), dùng để lấy giờ thực. */
 export function openScheduleEditor(sourceId: number, kind: number, origDate: string, date?: string): void {
   if (kind === 2) openEditor({ mode: 'task', id: sourceId })
-  else openEditor({ mode: 'occurrence', sourceId, origDate, date })
+  else openEditor({ mode: 'occurrence', sourceId, origDate, date, kind })
 }
 
 /** Kéo vùng trống trên lịch: date "YYYY-MM-DD", start / end "HH:MM". Giảng viên tạo lịch dạy, sinh viên tạo công việc. */
