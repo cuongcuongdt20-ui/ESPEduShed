@@ -68,6 +68,28 @@ const char *ld_get_str(const cJSON *data, const char *key)
     return cJSON_IsString(v) ? v->valuestring : NULL;
 }
 
+int ld_page_offset(const cJSON *data)
+{
+    int offset = 0;
+    if (ld_get_int(data, "offset", &offset) && offset > 0) return offset;
+    return 0;
+}
+
+bool ld_page_add(cJSON *arr, cJSON *item, int *budget)
+{
+    if (!arr || !item || !budget) return false;
+    char *text = cJSON_PrintUnformatted(item);
+    int need = text ? (int) strlen(text) + 2 : 0;
+    cJSON_free(text);
+    if (need > *budget) {
+        cJSON_Delete(item);
+        return false;
+    }
+    *budget -= need;
+    cJSON_AddItemToArray(arr, item);
+    return true;
+}
+
 void ld_push_changed_user(uint16_t user_id, const char *entity, uint32_t id)
 {
     push_count++;
@@ -152,6 +174,17 @@ static int invoke(const char *name, uint16_t user_id,
     int result = commands[i].fn(&ctx, data, out);
     cJSON_Delete(data);
     return result;
+}
+
+static const cJSON *item(const cJSON *obj, const char *key)
+{
+    return cJSON_GetObjectItemCaseSensitive(obj, key);
+}
+
+static int array_size(const cJSON *obj, const char *key)
+{
+    const cJSON *arr = item(obj, key);
+    return cJSON_IsArray(arr) ? cJSON_GetArraySize(arr) : -1;
 }
 
 static const char *valid_schedule =
@@ -245,6 +278,39 @@ TEST(invalid_schedule_does_not_persist)
     CHECK_EQ(dirty_count, 0);
     CHECK_EQ(push_count, 0);
 
+    cJSON_Delete(out);
+}
+
+TEST(invalid_optional_values_are_rejected)
+{
+    reset_fixture();
+    cJSON *out = cJSON_CreateObject();
+    CHECK_EQ(invoke("schedule.create", 42,
+                    "{\"subject_code\":\"CS101\",\"subject_name\":\"Lap trinh\","
+                    "\"school_id\":1,\"date_from\":\"2026-11-02\","
+                    "\"date_to\":\"2026-11-09\",\"day_of_week\":1,"
+                    "\"time_mode\":0,\"period_start\":3,\"period_count\":2,"
+                    "\"credits\":99}", out),
+             LD_ERR_BAD_ARG);
+    CHECK(strcmp(item(out, "_field")->valuestring, "credits") == 0);
+    CHECK_EQ(g_sched.n_series, 0);
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("task.create", 15,
+                    "{\"title\":\"X\",\"day\":\"2026-11-02\","
+                    "\"start\":\"10:00\",\"type\":300}", out),
+             LD_ERR_BAD_ARG);
+    CHECK(strcmp(item(out, "_field")->valuestring, "type") == 0);
+    CHECK_EQ(g_sched.n_tasks, 0);
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("task.create", 15,
+                    "{\"title\":\"X\",\"day\":\"2026-11-02\","
+                    "\"start\":\"10:00\",\"campus_id\":-1}", out),
+             LD_ERR_BAD_ARG);
+    CHECK(strcmp(item(out, "_field")->valuestring, "campus_id") == 0);
     cJSON_Delete(out);
 }
 
@@ -343,6 +409,206 @@ TEST(force_allows_schedule_conflict)
     cJSON_Delete(out);
 }
 
+TEST(schedule_get_returns_converted_period_times)
+{
+    reset_fixture();
+    cJSON *out = cJSON_CreateObject();
+    CHECK_EQ(invoke("schedule.create", 42, valid_schedule, out), LD_OK);
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("schedule.get", 42, "{\"id\":1}", out), LD_OK);
+    const cJSON *s = item(out, "schedule");
+    CHECK(cJSON_IsObject(s));
+    CHECK(strcmp(item(s, "start")->valuestring, "07:10") == 0);   // catalog giả: tiết 3-4
+    CHECK(strcmp(item(s, "end")->valuestring, "09:15") == 0);
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("schedule.get", 77, "{\"id\":1}", out), LD_ERR_NOT_FOUND);
+    cJSON_Delete(out);
+}
+
+TEST(occurrence_range_expands_real_schedule)
+{
+    reset_fixture();
+    cJSON *out = cJSON_CreateObject();
+    CHECK_EQ(invoke("schedule.create", 42, valid_schedule, out), LD_OK);
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("occurrence.range", 42,
+                    "{\"from\":\"2026-11-02\",\"to\":\"2026-11-09\"}", out), LD_OK);
+    CHECK_EQ(array_size(out, "items"), 2);        // hai thứ Hai
+    const cJSON *first = cJSON_GetArrayItem(item(out, "items"), 0);
+    CHECK_EQ(item(first, "sourceId")->valueint, 1);
+    CHECK(strcmp(item(first, "date")->valuestring, "2026-11-02") == 0);
+    CHECK(strcmp(item(first, "origDate")->valuestring, "2026-11-02") == 0);
+    CHECK(strcmp(item(first, "start")->valuestring, "07:10") == 0);
+    CHECK_EQ(item(first, "status")->valueint, OCC_NORMAL);
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();                    // người khác không thấy lịch
+    CHECK_EQ(invoke("occurrence.range", 77,
+                    "{\"from\":\"2026-11-02\",\"to\":\"2026-11-09\"}", out), LD_OK);
+    CHECK_EQ(array_size(out, "items"), 0);
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();                    // quá 62 ngày
+    CHECK_EQ(invoke("occurrence.range", 42,
+                    "{\"from\":\"2026-01-01\",\"to\":\"2026-03-04\"}", out), LD_ERR_BAD_ARG);
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();                    // thiếu from
+    CHECK_EQ(invoke("occurrence.range", 42, "{\"to\":\"2026-11-09\"}", out), LD_ERR_BAD_ARG);
+    CHECK(strcmp(item(out, "_field")->valuestring, "from") == 0);
+    cJSON_Delete(out);
+}
+
+TEST(exception_cancel_and_delete)
+{
+    reset_fixture();
+    cJSON *out = cJSON_CreateObject();
+    CHECK_EQ(invoke("schedule.create", 42, valid_schedule, out), LD_OK);
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("exception.set", 42,
+                    "{\"series_id\":1,\"orig_date\":\"2026-11-02\",\"type\":1}", out),
+             LD_OK);
+    CHECK_EQ(g_sched.n_exceptions, 1);
+    CHECK_EQ(g_sched.exceptions[0].type, EXC_CANCEL);
+    CHECK_EQ(push_count, 2);                       // create + exception.set
+    CHECK(strcmp(last_push_entity, "exception") == 0);
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("occurrence.range", 42,
+                    "{\"from\":\"2026-11-02\",\"to\":\"2026-11-02\"}", out), LD_OK);
+    CHECK_EQ(array_size(out, "items"), 1);
+    CHECK_EQ(item(cJSON_GetArrayItem(item(out, "items"), 0), "status")->valueint, OCC_CANCELLED);
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("exception.delete", 42,
+                    "{\"series_id\":1,\"orig_date\":\"2026-11-02\"}", out), LD_OK);
+    CHECK_EQ(g_sched.n_exceptions, 0);
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("occurrence.range", 42,
+                    "{\"from\":\"2026-11-02\",\"to\":\"2026-11-02\"}", out), LD_OK);
+    CHECK_EQ(item(cJSON_GetArrayItem(item(out, "items"), 0), "status")->valueint, OCC_NORMAL);
+    cJSON_Delete(out);
+}
+
+TEST(exception_rejects_foreign_series_and_bad_date)
+{
+    reset_fixture();
+    cJSON *out = cJSON_CreateObject();
+    CHECK_EQ(invoke("schedule.create", 42, valid_schedule, out), LD_OK);
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("exception.set", 77,
+                    "{\"series_id\":1,\"orig_date\":\"2026-11-02\",\"type\":1}", out),
+             LD_ERR_NOT_FOUND);
+    CHECK_EQ(g_sched.n_exceptions, 0);
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("exception.set", 42,
+                    "{\"series_id\":1,\"orig_date\":\"2026-11-03\",\"type\":1}", out),
+             LD_ERR_BAD_ARG);                      // thứ Ba không có buổi
+    CHECK(strcmp(item(out, "_field")->valuestring, "orig_date") == 0);
+    cJSON_Delete(out);
+}
+
+TEST(exception_move_emits_at_new_date)
+{
+    reset_fixture();
+    cJSON *out = cJSON_CreateObject();
+    CHECK_EQ(invoke("schedule.create", 42, valid_schedule, out), LD_OK);
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("exception.set", 42,
+                    "{\"series_id\":1,\"orig_date\":\"2026-11-02\",\"type\":4,"
+                    "\"new_date\":\"2026-11-03\"}", out),
+             LD_ERR_BAD_ARG);                      // thiếu giờ
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("exception.set", 42,
+                    "{\"series_id\":1,\"orig_date\":\"2026-11-02\",\"type\":4,"
+                    "\"new_date\":\"2026-11-03\",\"new_start\":\"10:00\",\"new_end\":\"11:00\"}",
+                    out),
+             LD_OK);
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("occurrence.range", 42,
+                    "{\"from\":\"2026-11-02\",\"to\":\"2026-11-03\"}", out), LD_OK);
+    CHECK_EQ(array_size(out, "items"), 1);        // 11-02 dời sang 11-03; 11-09 ngoài khoảng
+    const cJSON *moved = cJSON_GetArrayItem(item(out, "items"), 0);
+    CHECK(strcmp(item(moved, "date")->valuestring, "2026-11-03") == 0);
+    CHECK(strcmp(item(moved, "origDate")->valuestring, "2026-11-02") == 0);
+    CHECK(strcmp(item(moved, "start")->valuestring, "10:00") == 0);
+    CHECK_EQ(item(moved, "status")->valueint, OCC_CHANGED);
+    cJSON_Delete(out);
+}
+
+TEST(task_update_enforces_owner)
+{
+    reset_fixture();
+    const char *task =
+        "{\"title\":\"Nop bai\",\"day\":\"2026-11-02\","
+        "\"start\":\"10:00\",\"end\":\"10:30\"}";
+    cJSON *out = cJSON_CreateObject();
+    CHECK_EQ(invoke("task.create", 15, task, out), LD_OK);
+    cJSON_Delete(out);
+
+    const char *update =
+        "{\"id\":1,\"title\":\"Nop bai sua\",\"day\":\"2026-11-02\","
+        "\"start\":\"10:00\",\"end\":\"10:30\",\"status\":2}";
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("task.update", 99, update, out), LD_ERR_NOT_FOUND);
+    CHECK(strcmp(g_sched.tasks[0].title, "Nop bai") == 0);
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("task.update", 15, update, out), LD_OK);
+    CHECK(strcmp(g_sched.tasks[0].title, "Nop bai sua") == 0);
+    CHECK_EQ(g_sched.tasks[0].status, 2);
+    CHECK_EQ(g_sched.tasks[0].owner_id, 15);
+    cJSON_Delete(out);
+}
+
+TEST(schedule_update_removes_stale_exceptions)
+{
+    reset_fixture();
+    cJSON *out = cJSON_CreateObject();
+    CHECK_EQ(invoke("schedule.create", 42, valid_schedule, out), LD_OK);
+    cJSON_Delete(out);
+
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("exception.set", 42,
+                    "{\"series_id\":1,\"orig_date\":\"2026-11-09\",\"type\":1}", out),
+             LD_OK);
+    CHECK_EQ(g_sched.n_exceptions, 1);
+    cJSON_Delete(out);
+
+    const char *update =
+        "{\"id\":1,\"subject_code\":\"CS101\",\"subject_name\":\"Lap trinh\","
+        "\"school_id\":1,\"date_from\":\"2026-11-02\",\"date_to\":\"2026-11-02\","
+        "\"day_of_week\":1,\"time_mode\":0,\"period_start\":3,\"period_count\":2}";
+    out = cJSON_CreateObject();
+    CHECK_EQ(invoke("schedule.update", 42, update, out), LD_OK);
+    CHECK_EQ(item(out, "removedExceptions")->valueint, 1);
+    CHECK_EQ(g_sched.n_exceptions, 0);            // 11-09 không còn là buổi
+    cJSON_Delete(out);
+}
+
 int main(void)
 {
     RUN(command_roles_are_registered);
@@ -350,10 +616,18 @@ int main(void)
     RUN(other_user_cannot_update_schedule);
     RUN(other_user_cannot_delete_schedule);
     RUN(invalid_schedule_does_not_persist);
+    RUN(invalid_optional_values_are_rejected);
     RUN(create_task_sets_owner_and_notifies);
     RUN(other_user_cannot_delete_task);
     RUN(deadline_task_accepts_equal_start_and_end);
     RUN(conflict_blocks_schedule_without_force);
     RUN(force_allows_schedule_conflict);
+    RUN(schedule_get_returns_converted_period_times);
+    RUN(occurrence_range_expands_real_schedule);
+    RUN(exception_cancel_and_delete);
+    RUN(exception_rejects_foreign_series_and_bad_date);
+    RUN(exception_move_emits_at_new_date);
+    RUN(task_update_enforces_owner);
+    RUN(schedule_update_removes_stale_exceptions);
     return REPORT();
 }

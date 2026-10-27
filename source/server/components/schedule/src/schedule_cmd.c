@@ -165,10 +165,19 @@ static int occurrence_range(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
 static cJSON *series_json(const sched_series_t *s)
 {
     char df[11], dto[11], st[6], en[6];
+    uint16_t start_min = s->start_min, end_min = s->end_min;
+    // Lịch theo tiết không lưu giờ thực trong bản ghi; trả giờ đã quy đổi để client hiển thị đúng.
+    if (s->time_mode == TIME_BY_PERIOD) {
+        uint16_t a, b;
+        if (series_slot(s, &a, &b)) {
+            start_min = a;
+            end_min = b;
+        }
+    }
     dt_format_date(s->from, df);
     dt_format_date(s->to, dto);
-    dt_format_hm(s->start_min, st);
-    dt_format_hm(s->end_min, en);
+    dt_format_hm(start_min, st);
+    dt_format_hm(end_min, en);
     cJSON *o = cJSON_CreateObject();
     cJSON_AddNumberToObject(o, "id", s->id);
     cJSON_AddStringToObject(o, "subject_code", s->subject_code);
@@ -246,10 +255,22 @@ static int read_series(const cJSON *data, cJSON *out, sched_series_t *s)
         return ld_fail(out, LD_ERR_BAD_ARG, "Phong toi da 16 ky tu", "room");
     if (!take_str(ld_get_str(data, "note"), s->note, sizeof(s->note), false))
         return ld_fail(out, LD_ERR_BAD_ARG, "Ghi chu toi da 120 ky tu", "note");
-    if (ld_get_int(data, "class_id", &v) && v >= 0 && v <= UINT16_MAX) s->class_id = (uint16_t) v;
-    if (ld_get_int(data, "credits", &v) && v >= 0 && v <= 20) s->credits = (uint8_t) v;
-    if (ld_get_int(data, "size", &v) && v >= 0 && v <= 1000) s->size = (uint16_t) v;
-    if (ld_get_int(data, "campus_id", &v) && v >= 0 && v <= UINT16_MAX) s->campus_id = (uint16_t) v;
+    if (ld_get_int(data, "class_id", &v)) {
+        if (v < 0 || v > UINT16_MAX) return ld_fail(out, LD_ERR_BAD_ARG, "class_id 0..65535", "class_id");
+        s->class_id = (uint16_t) v;
+    }
+    if (ld_get_int(data, "credits", &v)) {
+        if (v < 0 || v > 20) return ld_fail(out, LD_ERR_BAD_ARG, "So tin chi 0..20", "credits");
+        s->credits = (uint8_t) v;
+    }
+    if (ld_get_int(data, "size", &v)) {
+        if (v < 0 || v > 1000) return ld_fail(out, LD_ERR_BAD_ARG, "Si so 0..1000", "size");
+        s->size = (uint16_t) v;
+    }
+    if (ld_get_int(data, "campus_id", &v)) {
+        if (v < 0 || v > UINT16_MAX) return ld_fail(out, LD_ERR_BAD_ARG, "campus_id 0..65535", "campus_id");
+        s->campus_id = (uint16_t) v;
+    }
 
     if (!get_range(data, "school_id", 1, UINT16_MAX, &v) || !catalog_school_exists((uint16_t) v))
         return ld_fail(out, LD_ERR_BAD_ARG, "Chon truong co trong danh muc", "school_id");
@@ -569,12 +590,18 @@ static int read_task(const cJSON *data, cJSON *out, sched_task_t *t)
         return ld_fail(out, LD_ERR_BAD_ARG, "Dia diem toi da 64 ky tu", "place");
     if (!take_str(ld_get_str(data, "note"), t->note, sizeof(t->note), false))
         return ld_fail(out, LD_ERR_BAD_ARG, "Ghi chu toi da 120 ky tu", "note");
-    if (ld_get_int(data, "type", &v) && v >= 0 && v <= UINT8_MAX) t->type = (uint8_t) v;
+    if (ld_get_int(data, "type", &v)) {
+        if (v < 0 || v > UINT8_MAX) return ld_fail(out, LD_ERR_BAD_ARG, "type 0..255", "type");
+        t->type = (uint8_t) v;
+    }
     if (ld_get_int(data, "status", &v)) {
         if (v < 0 || v > 3) return ld_fail(out, LD_ERR_BAD_ARG, "status 0..3", "status");
         t->status = (uint8_t) v;
     }
-    if (ld_get_int(data, "campus_id", &v) && v >= 0 && v <= UINT16_MAX) t->campus_id = (uint16_t) v;
+    if (ld_get_int(data, "campus_id", &v)) {
+        if (v < 0 || v > UINT16_MAX) return ld_fail(out, LD_ERR_BAD_ARG, "campus_id 0..65535", "campus_id");
+        t->campus_id = (uint16_t) v;
+    }
 
     if (!dt_parse_date(ld_get_str(data, "day"), &t->day)) return ld_fail(out, LD_ERR_BAD_ARG, "Thieu hoac sai day", "day");
     const char *until = ld_get_str(data, "until");
@@ -607,6 +634,12 @@ static int task_save(const ld_ctx_t *ctx, const cJSON *data, cJSON *out, bool up
 {
     int id = 0;
     if (update && !get_range(data, "id", 1, INT_MAX, &id)) return ld_fail(out, LD_ERR_BAD_ARG, "Thieu id", "id");
+    if (update) {
+        ld_lock(g_sched_lock);
+        bool mine = find_task((uint32_t) id, ctx->user_id) >= 0;
+        ld_unlock(g_sched_lock);
+        if (!mine) return ld_fail(out, LD_ERR_NOT_FOUND, "Khong tim thay cong viec", "id");
+    }
     sched_task_t t;
     memset(&t, 0, sizeof(t));
     int r = read_task(data, out, &t);
