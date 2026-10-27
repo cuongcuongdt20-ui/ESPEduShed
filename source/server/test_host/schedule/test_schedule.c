@@ -245,6 +245,54 @@ TEST(han_chot_hien_tren_lich)
 }
 
 
+TEST(nhan_phong_ap_dung_ngoai_le_doi_phong)
+{
+    setup_one_series();
+    strcpy(g_sched.series[0].room, "A2-301");
+
+    int32_t changed_day = dt_from_ymd(2026, 9, 2);
+    g_sched.n_exceptions = 1;
+    g_sched.exceptions[0] = (sched_exception_t) {
+        .series_id = 10,
+        .orig_day = changed_day,
+        .type = EXC_ROOM,
+        .new_room = "B-204"
+    };
+
+    char room[17];
+    CHECK(sched_room_override(10, changed_day, room));
+    CHECK(strcmp(room, "B-204") == 0);            // buổi bị đổi phòng
+    CHECK(!sched_room_override(10, dt_from_ymd(2026, 9, 9), room));   // buổi khác phòng gốc
+}
+
+TEST(khoang_rong_va_bien_ngay)
+{
+    setup_one_series();                            // thứ Tư, 09:00-10:00
+
+    occurrence_t out[8];
+    CHECK_EQ(sched_expand(1, dt_from_ymd(2026, 9, 3), dt_from_ymd(2026, 9, 3), out, 8), 0);
+    CHECK_EQ(sched_expand(1, dt_from_ymd(2026, 8, 31), dt_from_ymd(2026, 9, 1), out, 8), 0);
+    CHECK_EQ(sched_expand(1, dt_from_ymd(2026, 9, 2), dt_from_ymd(2026, 9, 2), out, 8), 1);
+    CHECK_EQ(out[0].day, dt_from_ymd(2026, 9, 2));
+}
+
+TEST(cong_viec_lap_khop_vao_khoang_truy_van)
+{
+    schedule_core_init();
+    g_sched.n_tasks = 1;
+    g_sched.tasks[0] = (sched_task_t) {
+        .id = 20, .owner_id = 1,
+        .day = dt_from_ymd(2026, 9, 1),
+        .until = dt_from_ymd(2026, 9, 15),
+        .start_min = 10 * 60, .end_min = 10 * 60 + 30
+    };
+
+    occurrence_t out[8];
+    int n = sched_expand(1, dt_from_ymd(2026, 9, 3), dt_from_ymd(2026, 9, 10), out, 8);
+    CHECK_EQ(n, 1);
+    CHECK_EQ(out[0].day, dt_from_ymd(2026, 9, 8));   // mốc lặp vẫn tính từ ngày bắt đầu
+}
+
 int main(void)
 {
     RUN(lap_hang_tuan_thang_9);
@@ -258,5 +306,8 @@ int main(void)
     RUN(cong_viec_lap_hang_tuan);
     RUN(day_bu_huy_buoi_goc_va_them_buoi_bu);
     RUN(han_chot_hien_tren_lich);
+    RUN(nhan_phong_ap_dung_ngoai_le_doi_phong);
+    RUN(khoang_rong_va_bien_ngay);
+    RUN(cong_viec_lap_khop_vao_khoang_truy_van);
     return REPORT();
 }

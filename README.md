@@ -681,11 +681,15 @@ python source/tools/fake_server.py --dev      # admin / admin123
 ## 11.4. Run Test
 
 ```bash
-# Logic C trên máy tính: ghép khung, phiên, chặn dò mật khẩu (TV1); ngày giờ, quy đổi tiết (TV2); sinh buổi (TV3)
-# (Windows: chạy trong MSYS2 hoặc WSL có gcc và make)
+# Logic C trên máy tính: platform (TV1); catalog, catalog_cmd (TV2); schedule, schedule_cmd,
+# schedule_store (TV3); calendar, calendar_cmd (TV4)
+# (Windows: chạy trong MSYS2/WSL/Git Bash có gcc và make. catalog_cmd, schedule_cmd,
+#  schedule_store và calendar_cmd cần cJSON của ESP-IDF: lấy theo IDF_PATH sau khi chạy export
+#  của ESP-IDF, hoặc đặt CJSON_DIR. Không thấy cJSON thì make báo bỏ qua 4 bộ đó.)
 cd source/server/test_host
-make platform catalog schedule
-make calendar          # TV4: thuật toán trùng lịch
+make                   # chạy cả 8 bộ test (4 bộ nếu không có cJSON)
+# hoặc chạy từng phần: make platform | catalog | catalog_cmd | schedule | schedule_cmd |
+# schedule_store | calendar | calendar_cmd
 
 # App: ghép khung và PBKDF2/HMAC phía client
 cd source/client
@@ -716,9 +720,9 @@ Trạng thái ghi đúng tình hình hiện tại. "Đã kiểm thử" chỉ ghi
 | 7 | Tin đẩy thời gian thực | Thêm tài khoản ở client A, client B nhận `changed` | Đạt với `fake_server.py` (test tích hợp `TcpClient`) |
 | 8 | Tự nối lại khi mất kết nối | App thử lại mỗi 2 giây, tự đăng nhập lại nếu ESP đã khởi động lại | Đạt với `fake_server.py` (tắt rồi bật lại server) |
 | 9 | Wi-Fi AP cài đặt, sao lưu / khôi phục | `system.wifi`, `system.backup`, `system.restore` | Đã viết, chưa chạy trên ESP32 |
-| 10 | Danh mục trường, bảng tiết (TV2) | Quy đổi tiết, tiết không liên tục | `make catalog` đạt 19/19 trên máy tính. Chưa chạy trên ESP32 |
-| 11 | Lịch dạy, công việc, ngoại lệ (TV3) | Sinh buổi, huỷ, dời, dạy bù, hạn chót | `make schedule` đạt 35/35 trên máy tính. Chưa chạy trên ESP32 |
-| 12 | Lịch tuần FullCalendar, kiểm tra trùng (TV4) | Trùng giờ, thiếu thời gian di chuyển | `make calendar` đạt 23/23 trên máy tính. Chưa chạy trên ESP32 |
+| 10 | Danh mục trường, bảng tiết (TV2) | Quy đổi tiết, tiết không liên tục, 25 lệnh CRUD | `make catalog` đạt 19/19, `make catalog_cmd` đạt 178/178 trên máy tính. Chưa chạy trên ESP32 |
+| 11 | Lịch dạy, công việc, ngoại lệ (TV3) | Sinh buổi, huỷ, dời, đổi phòng, dạy bù, hạn chót; lưu JSON Lines | `make schedule` đạt 44/44, `make schedule_cmd` đạt 134/134, `make schedule_store` đạt 39/39 trên máy tính. Chưa chạy trên ESP32 |
+| 12 | Lịch tuần FullCalendar, kiểm tra trùng (TV4) | Trùng giờ, thiếu thời gian di chuyển, xác nhận xung đột | `make calendar` đạt 29/29, `make calendar_cmd` đạt 92/92 trên máy tính. Chưa chạy trên ESP32 |
 
 ---
 
