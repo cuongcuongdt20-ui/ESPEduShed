@@ -65,11 +65,21 @@ static bool series_slot(const sched_series_t *s, uint16_t *start, uint16_t *end)
 
 // Danh sách xung đột trả về client: [{date, start, end, reason, with:{sourceId, kind, title, start, end}}].
 // Bên "with" là buổi đang có (không phải ứng viên mang mã cand_id).
-static void add_conflicts(cJSON *out, const conflict_t *cf, int k, uint32_t cand_id)
+// o có phải một trong các buổi ứng viên không (so cả ngày, giờ, ngày gốc: hai vế có thể cùng một lịch)
+static bool is_candidate(const occurrence_t *o, const occurrence_t *cand, int n)
+{
+    for (int i = 0; i < n; i++)
+        if (o->source_id == cand[i].source_id && o->day == cand[i].day && o->orig_day == cand[i].orig_day
+            && o->start_min == cand[i].start_min && o->end_min == cand[i].end_min)
+            return true;
+    return false;
+}
+
+static void add_conflicts(cJSON *out, const conflict_t *cf, int k, const occurrence_t *cand, int n)
 {
     cJSON *arr = cJSON_AddArrayToObject(out, "conflicts");
     for (int i = 0; i < k; i++) {
-        const occurrence_t *other = cf[i].a.source_id == cand_id ? &cf[i].b : &cf[i].a;
+        const occurrence_t *other = is_candidate(&cf[i].a, cand, n) ? &cf[i].b : &cf[i].a;
         char d[11], s[6], e[6], os[6], oe[6], title[65] = "", room[17] = "", cls[17] = "";
         dt_format_date(other->day, d);
         dt_format_hm(cf[i].overlap_start, s);
@@ -100,7 +110,7 @@ static int check_or_conflict(const ld_ctx_t *ctx, const occurrence_t *cand, int 
     conflict_t *cf = malloc(sizeof(conflict_t) * MAX_CONFLICTS);
     if (!cf) return ld_fail(out, LD_ERR_INTERNAL, "Het bo nho", NULL);
     int k = conflict_check(ctx->user_id, cand, n, ignore, cf, MAX_CONFLICTS);
-    if (k > 0) add_conflicts(out, cf, k, cand[0].source_id);
+    if (k > 0) add_conflicts(out, cf, k, cand, n);
     free(cf);
     if (k > 0) return ld_fail(out, LD_ERR_CONFLICT, "Trung lich hoac khong du thoi gian di chuyen; gui lai voi force de van luu", NULL);
     return LD_OK;
@@ -124,7 +134,8 @@ static int occurrence_range(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
         return ld_fail(out, LD_ERR_BAD_ARG, "Khoang ngay qua dai hoac qua nhieu buoi", NULL);
     }
     cJSON *arr = cJSON_AddArrayToObject(out, "items");
-    for (int i = 0; i < n; i++) {
+    int budget = LD_PAGE_BUDGET;
+    for (int i = ld_page_offset(data); i < n; i++) {
         char d[11], od[11], s[6], e[6];
         dt_format_date(occ[i].day, d);
         dt_format_date(occ[i].orig_day, od);
@@ -140,7 +151,10 @@ static int occurrence_range(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
         cJSON_AddStringToObject(o, "end", e);
         cJSON_AddNumberToObject(o, "school", occ[i].school_id);
         cJSON_AddNumberToObject(o, "campus", occ[i].campus_id);
-        cJSON_AddItemToArray(arr, o);
+        if (!ld_page_add(arr, o, &budget)) {
+            cJSON_AddNumberToObject(out, "next", i);
+            break;
+        }
     }
     free(occ);
     return LD_OK;
@@ -184,8 +198,15 @@ static int schedule_list(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
 {
     cJSON *arr = cJSON_AddArrayToObject(out, "schedules");
     ld_lock(g_sched_lock);
-    for (int i = 0; i < g_sched.n_series; i++)
-        if (g_sched.series[i].owner_id == ctx->user_id) cJSON_AddItemToArray(arr, series_json(&g_sched.series[i]));
+    int budget = LD_PAGE_BUDGET;
+    for (int i = ld_page_offset(data); i < g_sched.n_series; i++) {
+        if (g_sched.series[i].owner_id != ctx->user_id) continue;
+        cJSON *o = series_json(&g_sched.series[i]);
+        if (!ld_page_add(arr, o, &budget)) {
+            cJSON_AddNumberToObject(out, "next", i);
+            break;
+        }
+    }
     ld_unlock(g_sched_lock);
     return LD_OK;
 }
@@ -500,7 +521,8 @@ static int task_list(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
 {
     cJSON *arr = cJSON_AddArrayToObject(out, "tasks");
     ld_lock(g_sched_lock);
-    for (int i = 0; i < g_sched.n_tasks; i++) {
+    int budget = LD_PAGE_BUDGET;
+    for (int i = ld_page_offset(data); i < g_sched.n_tasks; i++) {
         const sched_task_t *t = &g_sched.tasks[i];
         if (t->owner_id != ctx->user_id) continue;
         char day[11], until[11], st[6], en[6];
@@ -526,7 +548,10 @@ static int task_list(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
         cJSON_AddStringToObject(o, "place", t->place);
         cJSON_AddNumberToObject(o, "status", t->status);
         cJSON_AddStringToObject(o, "note", t->note);
-        cJSON_AddItemToArray(arr, o);
+        if (!ld_page_add(arr, o, &budget)) {
+            cJSON_AddNumberToObject(out, "next", i);
+            break;
+        }
     }
     ld_unlock(g_sched_lock);
     return LD_OK;

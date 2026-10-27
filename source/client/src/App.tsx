@@ -2,6 +2,7 @@
 //   chưa nối server → /connect;  chưa đăng nhập → /login;  bị bắt đổi mật khẩu → /change-password
 import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { ToastProvider } from './core/components/toast'
+import { ConfirmProvider } from './core/components/confirm'
 import { coreRoutes } from './core/core-routes'
 import { AppLayout } from './core/layout/AppLayout'
 import { ConnectPage } from './core/pages/ConnectPage'
@@ -45,9 +46,11 @@ export default function App() {
   return (
     <HashRouter>
       <ToastProvider>
-        <SessionProvider>
-          <Shell />
-        </SessionProvider>
+        <ConfirmProvider>
+          <SessionProvider>
+            <Shell />
+          </SessionProvider>
+        </ConfirmProvider>
       </ToastProvider>
     </HashRouter>
   )

@@ -2,7 +2,7 @@
 // Thêm / sửa mở hộp thoại trong dialogs.tsx (qua editor.ts), cùng hộp thoại mà trang lịch của TV4 dùng.
 import { ClipboardList, Plus } from 'lucide-react'
 import type { ModuleRoute } from '../core/routes'
-import { useRequest } from '../core/api'
+import { useList } from '../core/api'
 import { useSession } from '../core/session'
 import { Button } from '../core/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../core/components/ui/card'
@@ -42,10 +42,10 @@ function Table({ headers, rows, cells, onOpen, empty }: {
 function SchedulesPage() {
   const { hasRole } = useSession()
   const teacher = hasRole('teacher')
-  const series = useRequest<{ schedules: Row[] }>('schedule.list', {}, [], ['schedule', 'exception'])
-  const tasks = useRequest<{ tasks: Row[] }>('task.list', {}, [], ['task'])
-  const schools = useRequest<{ schools: Row[] }>('school.list', {}, [], ['school'])
-  const schoolName = (id: number) => schools.data?.schools?.find((s) => s.id === id)?.shortName ?? id
+  const series = useList<Row>('schedule.list', 'schedules', ['schedule', 'exception'])
+  const tasks = useList<Row>('task.list', 'tasks', ['task'])
+  const schools = useList<Row>('school.list', 'schools', ['school'])
+  const schoolName = (id: number) => schools.data?.find((s) => s.id === id)?.shortName ?? id
 
   return (
     <div className="space-y-5">
@@ -59,7 +59,7 @@ function SchedulesPage() {
             {series.error && <p className="mb-2 text-sm text-destructive">{series.error}</p>}
             <Table
               headers={['Học phần', 'Lớp', 'Trường', 'Thứ', 'Giờ', 'Phòng', 'Thời gian áp dụng']}
-              rows={series.data?.schedules ?? []}
+              rows={series.data ?? []}
               cells={[
                 (s) => <><b>{s.subject_code}</b> {s.subject_name}</>,
                 (s) => s.class_code,
@@ -85,7 +85,7 @@ function SchedulesPage() {
           {tasks.error && <p className="mb-2 text-sm text-destructive">{tasks.error}</p>}
           <Table
             headers={['Công việc', 'Loại', 'Ngày', 'Giờ', 'Lặp', 'Trạng thái']}
-            rows={[...(tasks.data?.tasks ?? [])].sort((a, b) => (a.day + a.start).localeCompare(b.day + b.start))}
+            rows={[...(tasks.data ?? [])].sort((a, b) => (a.day + a.start).localeCompare(b.day + b.start))}
             cells={[
               (t) => t.title,
               (t) => TASK_TYPES[t.type] ?? t.type,

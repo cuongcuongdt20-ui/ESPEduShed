@@ -168,8 +168,9 @@ static int cmd_restore(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
     if (last) {
         char path[48];
         snprintf(path, sizeof(path), "/data/%s", file);
+        store_freeze_writes();               // từ đây dữ liệu trong RAM đã cũ: không cho ghi đè file vừa khôi phục
         if (rename(tmp, path) != 0) return ld_fail(out, LD_ERR_INTERNAL, "Khong thay duoc file", NULL);
-        ESP_LOGW(TAG, "da khoi phuc %s", file);
+        ESP_LOGW(TAG, "da khoi phuc %s, can khoi dong lai de nap", file);
     }
     cJSON_AddNumberToObject(out, "written", (double) (offset + (long) n));
     if (last && reboot) {

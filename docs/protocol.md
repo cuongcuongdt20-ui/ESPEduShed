@@ -142,6 +142,13 @@ client                                                   server
   Khôi phục ghi vào `<file>.restore`, mẩu cuối (`last: true`) mới đổi tên đè file thật. Khôi phục xong file cuối thì
   gửi `reboot: true` để mọi module nạp lại dữ liệu.
 
+### Phân trang lệnh danh sách
+
+`school.list`, `campus.list`, `holiday.list`, `subject.list`, `class.list`, `schedule.list`, `task.list`, `occurrence.range`
+nhận thêm `offset` (mặc định 0). Mỗi phản hồi chứa tối đa khoảng 6 KB mục; còn mục thì có thêm `"next": n`, client gửi
+lại cùng lệnh với `offset: n` cho tới khi phản hồi không còn `next` (app dùng `requestAll` trong `src/core/api.ts`).
+Lý do: khung tin tối đa 8 KB, danh sách dài (ví dụ 16 trường × 20 tiết) sẽ vượt nếu trả một lần.
+
 ## 3. Lệnh của TV2 (`school.*`, `campus.*`, `periods.*`, `holiday.*`, `subject.*`, `class.*`, `travel.*`)
 
 > TV2: `school.list` trả về trường và bảng tiết; các màn hình danh mục gọi thêm `campus.*`, `holiday.*`, `subject.*`, `class.*` và `travel.*`.
@@ -208,7 +215,7 @@ Tất cả lệnh dành cho mọi vai trò (`student` trở lên) và chỉ làm
 | `calendar.week` | student | `{date?}` | `{from, to, items, conflicts, truncated?}` | `BAD_ARG` (ESP chưa có giờ mà không gửi `date`) |
 | `calendar.range` | student | `{from, to}` | như `calendar.week` | `BAD_ARG` (quá 62 ngày, hoặc quá nhiều buổi) |
 | `conflict.list` | student | `{from?, to?}` (bỏ trống: tuần hiện tại) | `{from, to, conflicts: [{a, b, date, start, end, reason, acked}], truncated?}`, với `a`, `b` là `{sourceId, kind, title, start, end}` | `BAD_ARG` |
-| `conflict.check` | student | cách 1 (dời buổi có sẵn): `{sourceId, origDate, date, start, end}`; cách 2 (buổi mới): `{date, start, end, schoolId?, campusId?, ignoreSourceId?}` | `{conflicts: [{with: {sourceId, kind, title, start, end}, date, start, end, reason}]}` (rỗng nếu không trùng); **không** trả lỗi `CONFLICT` | `BAD_ARG`, `NOT_FOUND` (không có buổi đó của người dùng) |
+| `conflict.check` | student | cách 1 (dời buổi có sẵn): `{sourceId, kind?, origDate, curDate?, date, start, end}` (`curDate` = ngày buổi đang nằm, cần khi buổi đã bị dời hoặc là buổi dạy bù; mặc định `origDate`); cách 2 (buổi mới): `{date, start, end, schoolId?, campusId?, ignoreSourceId?}` | `{conflicts: [{with: {sourceId, kind, title, start, end}, date, start, end, reason}]}` (rỗng nếu không trùng); **không** trả lỗi `CONFLICT` | `BAD_ARG`, `NOT_FOUND` (không có buổi đó của người dùng) |
 | `conflict.ack` | student | `{a, b, date}` (mã nguồn của hai buổi) | `{}` | `NOT_FOUND` (cặp này không phải xung đột của người dùng), `FULL` (quá 128 xác nhận) |
 
 **`items`:** mỗi phần tử `{sourceId, kind, status, date, origDate, start, end, title, room, classCode, school, color}`.
@@ -220,7 +227,8 @@ Tất cả lệnh dành cho mọi vai trò (`student` trở lên) và chỉ làm
 
 **Quy tắc xét trùng:**
 - Hai buổi cùng ngày trùng giờ khi `a.start < b.end && b.start < a.end`. Hai buổi nối sát nhau (10:00 và 10:00) không trùng.
-- Khác cơ sở và khoảng nghỉ nhỏ hơn thời gian di chuyển của `travel.*` thì báo thiếu thời gian di chuyển. Buổi không
+- Hai buổi **liền nhau** (không có buổi khác chen giữa) khác cơ sở và khoảng nghỉ nhỏ hơn thời gian di chuyển của `travel.*` thì báo thiếu thời gian di chuyển.
+- Khi sửa hoặc dời một buổi, chỉ bỏ qua chính buổi đó (cùng lịch, cùng ngày gốc); các buổi khác của cùng lịch vẫn được so. Buổi không
   gắn cơ sở (học trực tuyến) không bị xét di chuyển.
 - Bỏ qua buổi đã huỷ, nghỉ lễ, và mục không có khoảng giờ (hạn chót, `start >= end`).
 

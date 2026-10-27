@@ -83,4 +83,5 @@ void system_register_cmds(void);
 // ---------- storage.c, time_svc.c
 esp_err_t storage_init(void);
 bool      storage_info(size_t *total, size_t *used);
+void      store_freeze_writes(void);     // system.restore gọi: chặn ghi tới khi khởi động lại
 void      time_init(void);

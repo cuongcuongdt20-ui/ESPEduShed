@@ -28,6 +28,8 @@ typedef struct {
 // Trả số buổi; -1 nếu vượt max hoặc khoảng quá SCHED_MAX_RANGE_DAYS.
 int  sched_expand(uint16_t user_id, int32_t from, int32_t to, occurrence_t *out, int max);
 bool sched_label(uint32_t source_id, uint8_t kind, char title[65], char room[17], char class_code[17]);
+// Phòng riêng của một buổi khi buổi đó có ngoại lệ đổi phòng; false nếu không có (dùng phòng của sched_label)
+bool sched_room_override(uint32_t source_id, int32_t orig_day, char room[17]);
 bool sched_uses_school(uint16_t school_id);      // TV2 gọi trước khi xoá trường hoặc cơ sở
 bool sched_uses_class(uint16_t class_id);        // TV2 gọi trước khi xoá lớp
 

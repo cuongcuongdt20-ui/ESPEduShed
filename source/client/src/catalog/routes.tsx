@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Building2, CalendarDays, Clock3, GraduationCap, MapPinned, School, BookOpen, RefreshCw, Plus, Save, Trash2 } from 'lucide-react'
 import type { ModuleRoute } from '../core/routes'
-import { api, errorText, usePush } from '../core/api'
+import { api, errorText, requestAll, usePush } from '../core/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../core/components/ui/card'
 import { Button } from '../core/components/ui/button'
 import { Input, Select, Label } from '../core/components/ui/input'
+import { useConfirm } from '../core/components/confirm'
 
 type Tab = 'schools' | 'periods' | 'holidays' | 'subjects' | 'classes' | 'travel'
 type Row = Record<string, any>
@@ -15,6 +16,7 @@ const tabs: { id: Tab; label: string; icon: typeof School }[] = [
 ]
 function fmtDate(value: string) { return value || '' }
 function CatalogPage() {
+  const confirm = useConfirm()
   const [tab, setTab] = useState<Tab>('schools')
   const [schools, setSchools] = useState<Row[]>([])
   const [campuses, setCampuses] = useState<Row[]>([])
@@ -35,8 +37,14 @@ function CatalogPage() {
     setLoading(true); setError('')
     try {
       // allSettled: lệnh nào server chưa có (UNKNOWN_CMD) thì bỏ qua phần đó, các phần khác vẫn hiện
-      const names = ['school.list', 'holiday.list', 'subject.list', 'class.list', 'travel.get', 'campus.list']
-      const results = await Promise.allSettled(names.map(n => api.request<any>(n)))
+      // Các lệnh .list có phân trang: requestAll gộp mọi trang thành {<key>: [...]}
+      const lists: [string, string][] = [['school.list', 'schools'], ['holiday.list', 'holidays'], ['subject.list', 'subjects'], ['class.list', 'classes']]
+      const names = [...lists.map(([n]) => n), 'travel.get', 'campus.list']
+      const results = await Promise.allSettled([
+        ...lists.map(([n, k]) => requestAll(n, k).then(items => ({ [k]: items }))),
+        api.request<any>('travel.get'),
+        requestAll('campus.list', 'campuses').then(campuses => ({ campuses })),
+      ])
       const failed = names.filter((_, i) => results[i].status === 'rejected')
       if (failed.length) setError(`Server chưa trả lời được: ${failed.join(', ')}`)
       const [s, h, sub, cls, tr, cp] = results.map(r => (r.status === 'fulfilled' ? r.value ?? {} : {}))
@@ -65,7 +73,7 @@ function CatalogPage() {
     return ''
   }, [sortedPeriods])
   const save = async (cmd: string, data: Row) => { setError(''); setNotice(''); try { await api.request(cmd, data); setNotice('Đã lưu thay đổi.'); await refresh() } catch (e) { setError(errorText(e)) } }
-  const remove = async (cmd: string, data: Row) => { if (!window.confirm('Bạn chắc chắn muốn xóa mục này?')) return; await save(cmd, data) }
+  const remove = async (cmd: string, data: Row) => { if (!(await confirm('Bạn chắc chắn muốn xóa mục này?'))) return; await save(cmd, data) }
   const setField = (key: string, value: any) => setForm((f: Row) => ({ ...f, [key]: value }))
   const resetForm = (initial: Row = {}) => setForm(initial)
   const input = (label: string, key: string, placeholder = '', type = 'text') => <div className="space-y-1" key={key}><Label>{label}</Label><Input type={type} value={form[key] ?? ''} placeholder={placeholder} onChange={e => setField(key, e.target.value)} /></div>
