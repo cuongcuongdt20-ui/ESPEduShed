@@ -453,7 +453,7 @@ Hầu hết các đồ án môn học hoặc giải pháp quản lý lịch hi�
 
 1. **Máy chủ chạy hoàn toàn trên ESP32-S3:** server ứng dụng, nghiệp vụ lịch và lưu trữ đều nằm trên vi điều khiển. Laptop chỉ là client, không có backend nào trên máy tính làm thay.
 2. **Giao thức ứng dụng tự thiết kế trên TCP thuần:** khung tin "4 byte độ dài + JSON" giải quyết bài toán ranh giới thông điệp trên luồng byte TCP; mỗi khung chỉ tốn thêm 4 byte so với nội dung, kết nối giữ lâu dài và server chủ động đẩy tin thay đổi tới các client.
-3. **Phục vụ nhiều client bằng `select()` trên một task FreeRTOS:** không tạo task riêng cho mỗi kết nối, nên RAM thêm cho mỗi client chỉ là bộ đệm ghép khung 8 KB và hàng đợi gửi (cấp phát khi kết nối).
+3. **Phục vụ nhiều client bằng `select()` trên một task FreeRTOS:** không tạo task riêng cho mỗi kết nối, nên RAM thêm cho mỗi client chỉ là bộ đệm ghép khung (cấp đúng độ dài khi đang nhận dở một khung, trả lại ngay sau khi xử lý) và hàng đợi gửi.
 4. **Bảo mật mức ứng dụng phù hợp tài nguyên ESP32:** đăng nhập challenge–response (mật khẩu không đi trên mạng, chống gửi lại gói), token trong RAM, chặn dò mật khẩu theo IP, phân quyền theo vai trò và quyền sở hữu dữ liệu, thay cho TLS vốn tốn khoảng 10–15 KB RAM mỗi kết nối.
 5. **Nghiệp vụ lịch nhiều trường trên vi điều khiển:** bảng tiết riêng cho từng trường, quy đổi tiết sang giờ, lịch lặp kèm ngoại lệ, kiểm tra trùng lịch và thời gian di chuyển giữa các cơ sở, viết bằng C và test được trên máy tính.
 
