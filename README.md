@@ -739,7 +739,9 @@ python source/tools/fake_server.py --dev      # mật khẩu admin123
 ```bash
 # Logic C trên máy tính: platform (TV1); catalog, catalog_cmd (TV2); schedule, schedule_cmd,
 # schedule_store (TV3); calendar, calendar_cmd (TV4)
-# (Windows: chạy trong MSYS2/WSL/Git Bash có gcc và make. catalog_cmd, schedule_cmd,
+# (Windows: cài GCC bằng `winget install BrechtSanders.WinLibs.POSIX.UCRT`, rồi trong Git Bash chạy
+#  mingw32-make CC=gcc CJSON_DIR=C:/Espressif/v5.5.6/esp-idf/components/json/cJSON
+#  Hoặc dùng MSYS2/WSL có gcc và make. catalog_cmd, schedule_cmd,
 #  schedule_store và calendar_cmd cần cJSON của ESP-IDF: lấy theo IDF_PATH sau khi chạy export
 #  của ESP-IDF, hoặc đặt CJSON_DIR. Không thấy cJSON thì make báo bỏ qua 4 bộ đó.)
 cd source/server/test_host
@@ -764,8 +766,8 @@ python loadtest.py fragment --host 192.168.1.37
 
 Trạng thái ghi đúng tình hình hiện tại. "Đã kiểm thử" chỉ ghi khi có bài test hoặc kịch bản đã chạy, kèm môi trường đã chạy.
 
-> Số liệu `make ...` ở dòng 10–12 đo **trước** khi chuyển sang một người dùng và thêm màu riêng; test C đã được sửa theo
-> nhưng chưa chạy lại (máy dùng để sửa không có `gcc`). Cần chạy lại `make` trong `source/server/test_host` và cập nhật.
+> Test C (dòng 5, 10–12) chạy lại sau khi chuyển sang một người dùng và thêm màu riêng: cả 8 bộ đạt, không cảnh báo,
+> trên Windows 11 với GCC 16.2 (WinLibs) và cJSON của ESP-IDF 5.5.6.
 
 | No. | Feature | Description | Test |
 | :-: | :--- | :--- | :--- |
@@ -774,14 +776,14 @@ Trạng thái ghi đúng tình hình hiện tại. "Đã kiểm thử" chỉ ghi
 | 2 | Giới hạn 8 kết nối | Kết nối thứ 9 nhận `BUSY` | Đạt với `fake_server.py` (`loadtest.py maxconn`). Chưa chạy trên ESP32 |
 | 3 | Đăng nhập challenge–response | Mật khẩu không đi trên mạng | PBKDF2/HMAC phía client khớp vector chuẩn (`npm test`). Chưa chạy với ESP32 |
 | 4 | Chống gửi lại gói đăng nhập | `nonce` dùng một lần | Đạt với `fake_server.py` (`loadtest.py replay`). Chưa chạy trên ESP32 |
-| 5 | Chặn dò mật khẩu | Sai 5 lần, khoá IP 60 giây | Test logic `make platform` (cần gcc); đạt với `fake_server.py` |
+| 5 | Chặn dò mật khẩu | Sai 5 lần, khoá IP 60 giây | `make platform` đạt 76/76 trên máy tính (gồm cả ghép khung, phiên); đạt với `fake_server.py` |
 | 6 | Bắt đổi mật khẩu lần đầu | Mọi lệnh khác trả `FORBIDDEN` | Đạt với `fake_server.py` |
 | 7 | Tin đẩy thời gian thực | Sửa lịch ở client A, client B nhận `changed` | Đạt với `fake_server.py` (test tích hợp `TcpClient`) |
 | 8 | Tự nối lại khi mất kết nối | App thử lại mỗi 2 giây, tự đăng nhập lại nếu ESP đã khởi động lại | Đạt với `fake_server.py` (tắt rồi bật lại server) |
 | 9 | Wi-Fi AP cài đặt, sao lưu / khôi phục | `system.wifi`, `system.backup`, `system.restore` | Đã viết, chưa chạy trên ESP32 |
 | 10 | Danh mục trường, bảng tiết (TV2) | Quy đổi tiết, tiết không liên tục, 25 lệnh CRUD | `make catalog` đạt 19/19, `make catalog_cmd` đạt 178/178 trên máy tính. Chưa chạy trên ESP32 |
 | 11 | Lịch dạy, công việc, ngoại lệ (TV3) | Sinh buổi, huỷ, dời, đổi phòng, dạy bù, hạn chót; lưu JSON Lines | `make schedule` đạt 44/44, `make schedule_cmd` đạt 134/134, `make schedule_store` đạt 39/39 trên máy tính. Chưa chạy trên ESP32 |
-| 12 | Lịch tuần FullCalendar, kiểm tra trùng (TV4) | Trùng giờ, thiếu thời gian di chuyển, xác nhận xung đột | `make calendar` đạt 29/29, `make calendar_cmd` đạt 92/92 trên máy tính. Chưa chạy trên ESP32 |
+| 12 | Lịch tuần FullCalendar, kiểm tra trùng (TV4) | Trùng giờ, thiếu thời gian di chuyển, xác nhận xung đột | `make calendar` đạt 29/29, `make calendar_cmd` đạt 97/97 trên máy tính. Chưa chạy trên ESP32 |
 | 13 | Một tài khoản duy nhất | Đăng nhập chỉ bằng mật khẩu; `users.json` bản nhiều tài khoản tự chuyển sang, giữ tài khoản admin | App: `npm run typecheck`, `npm test` đạt. Chưa chạy trên ESP32 |
 | 14 | Web xem lịch trên điện thoại | `/c/<khoá>`, sai khoá trả 404, `web.rotate` làm link cũ hết hiệu lực | Build đạt. Chưa chạy trên ESP32 |
 | 15 | DuckDNS, truy cập từ mạng ngoài | Cập nhật IP mỗi 5 phút, app nối bằng tên miền | Build đạt. Chưa chạy trên ESP32 và chưa thử qua 4G |
