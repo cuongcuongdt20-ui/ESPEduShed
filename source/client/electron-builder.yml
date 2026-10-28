@@ -1,4 +1,6 @@
 # Đóng gói bản cài đặt Windows (TV1): npm run dist
+# Phát hành: GitHub Actions (.github/workflows/release-client.yml) build và đưa lên GitHub Releases khi đẩy tag
+# client-v<phiên bản>. App đã cài tự đọc latest.yml trong Release mới nhất để cập nhật (electron/updater.ts).
 appId: vn.edu.ptit.espedushed
 productName: ESPEduShed
 directories:
@@ -8,6 +10,12 @@ files:
   - package.json
 win:
   target: nsis
+  artifactName: ESPEduShed-Setup-${version}.${ext}
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+publish:
+  provider: github
+  owner: cuongcuongdt20-ui
+  repo: ESPEduShed
+  releaseType: release

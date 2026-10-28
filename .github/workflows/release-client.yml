@@ -1,0 +1,44 @@
+# Phát hành app ESPEduShed cho Windows (TV1).
+# Cách dùng: tăng "version" trong source/client/package.json, commit, rồi đẩy tag cùng số:
+#   git tag client-v1.0.1 && git push origin client-v1.0.1
+# Workflow build bản cài NSIS và đưa lên GitHub Releases (kèm latest.yml để app đã cài tự cập nhật).
+name: Release client
+
+on:
+  push:
+    tags: ['client-v*']
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: source/client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: source/client/package-lock.json
+
+      - name: Tag phải khớp version trong package.json
+        shell: bash
+        run: |
+          want="client-v$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "$want" ]; then
+            echo "Tag $GITHUB_REF_NAME khong khop package.json ($want)"; exit 1
+          fi
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npx electron-vite build
+      - name: Đóng gói và đưa lên GitHub Releases
+        run: npx electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
