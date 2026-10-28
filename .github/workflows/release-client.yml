@@ -22,7 +22,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22        # npm test dùng --experimental-strip-types, cần Node >= 22.6
           cache: npm
           cache-dependency-path: source/client/package-lock.json
 
