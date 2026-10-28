@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self' data:">
 <title>Lịch ESPEduShed</title>
 <style>
 :root {
@@ -56,6 +56,7 @@ header button {
 .fc .fc-toolbar { flex-wrap: wrap; gap: 6px; }
 .fc .fc-toolbar-title { font-size: 1.05rem; }
 .fc .fc-button { padding: 0.3em 0.55em; font-size: 0.85rem; }
+.fc .fc-prev-button, .fc .fc-next-button { min-width: 2.4em; font-size: 1.2rem; line-height: 1; font-weight: 700; }
 .fc .fc-event { color: hsl(var(--foreground)); }
 .ev-body { height: 100%; overflow: hidden; padding: 0 3px; font-size: 11px; line-height: 1.25; }
 .ev-body b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -215,7 +216,9 @@ header button {
       ? { left: 'prev,next', center: 'title', right: 'today' }
       : { left: 'prev,next today', center: 'title', right: 'timeGridWeek,timeGridDay,listWeek' },
     footerToolbar: narrow ? { center: 'listWeek,timeGridDay,timeGridWeek' } : false,
-    buttonText: { listWeek: 'Danh sách', timeGridDay: 'Ngày', timeGridWeek: 'Tuần' },
+    // Mũi tên bằng ký tự thay cho phông biểu tượng của FullCalendar: trình duyệt nào chặn phông nhúng cũng hiện đúng
+    buttonIcons: false,
+    buttonText: { prev: '‹', next: '›', today: 'Hôm nay', listWeek: 'Danh sách', timeGridDay: 'Ngày', timeGridWeek: 'Tuần' },
     height: '100%',
     allDaySlot: false,
     nowIndicator: true,
