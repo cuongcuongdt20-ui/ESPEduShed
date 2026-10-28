@@ -170,7 +170,6 @@ static int invoke(const char *name, uint16_t user_id,
     ld_ctx_t ctx;
     memset(&ctx, 0, sizeof(ctx));
     ctx.user_id = user_id;
-    ctx.role = commands[i].role;
 
     int result = commands[i].fn(&ctx, data, out);
     cJSON_Delete(data);
@@ -203,11 +202,11 @@ TEST(command_roles_are_registered)
 {
     reset_fixture();
 
-    CHECK_EQ(role_of("schedule.create"), LD_ROLE_TEACHER);
-    CHECK_EQ(role_of("schedule.update"), LD_ROLE_TEACHER);
-    CHECK_EQ(role_of("schedule.delete"), LD_ROLE_TEACHER);
-    CHECK_EQ(role_of("task.create"), LD_ROLE_STUDENT);
-    CHECK_EQ(role_of("task.delete"), LD_ROLE_STUDENT);
+    CHECK_EQ(role_of("schedule.create"), LD_ROLE_USER);
+    CHECK_EQ(role_of("schedule.update"), LD_ROLE_USER);
+    CHECK_EQ(role_of("schedule.delete"), LD_ROLE_USER);
+    CHECK_EQ(role_of("task.create"), LD_ROLE_USER);
+    CHECK_EQ(role_of("task.delete"), LD_ROLE_USER);
     CHECK(find_command("exception.set") >= 0);
     CHECK(find_command("occurrence.range") >= 0);
 }

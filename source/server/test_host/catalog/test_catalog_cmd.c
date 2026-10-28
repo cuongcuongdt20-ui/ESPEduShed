@@ -162,7 +162,6 @@ static int invoke(const char *name, const char *json, cJSON *out)
     ld_ctx_t ctx;
     memset(&ctx, 0, sizeof(ctx));
     ctx.user_id = 1;
-    ctx.role = commands[i].role;
 
     int result = commands[i].fn(&ctx, data, out);
     cJSON_Delete(data);
@@ -223,31 +222,31 @@ TEST(all_commands_registered_with_roles)
     reset_fixture();
 
     static const struct { const char *name; uint8_t role; } expected[] = {
-        {"school.list", LD_ROLE_STUDENT},
-        {"school.create", LD_ROLE_TEACHER},
-        {"school.update", LD_ROLE_TEACHER},
-        {"school.delete", LD_ROLE_TEACHER},
-        {"periods.set", LD_ROLE_TEACHER},
-        {"campus.list", LD_ROLE_STUDENT},
-        {"campus.create", LD_ROLE_TEACHER},
-        {"campus.update", LD_ROLE_TEACHER},
-        {"campus.delete", LD_ROLE_TEACHER},
-        {"holiday.list", LD_ROLE_STUDENT},
-        {"holiday.create", LD_ROLE_TEACHER},
-        {"holiday.update", LD_ROLE_TEACHER},
-        {"holiday.delete", LD_ROLE_TEACHER},
-        {"subject.list", LD_ROLE_STUDENT},
-        {"subject.create", LD_ROLE_TEACHER},
-        {"subject.update", LD_ROLE_TEACHER},
-        {"subject.delete", LD_ROLE_TEACHER},
-        {"class.list", LD_ROLE_STUDENT},
-        {"class.create", LD_ROLE_TEACHER},
-        {"class.update", LD_ROLE_TEACHER},
-        {"class.delete", LD_ROLE_TEACHER},
-        {"travel.get", LD_ROLE_STUDENT},
-        {"travel.set", LD_ROLE_TEACHER},
-        {"travel.delete", LD_ROLE_TEACHER},
-        {"travel.setDefault", LD_ROLE_TEACHER},
+        {"school.list", LD_ROLE_USER},
+        {"school.create", LD_ROLE_USER},
+        {"school.update", LD_ROLE_USER},
+        {"school.delete", LD_ROLE_USER},
+        {"periods.set", LD_ROLE_USER},
+        {"campus.list", LD_ROLE_USER},
+        {"campus.create", LD_ROLE_USER},
+        {"campus.update", LD_ROLE_USER},
+        {"campus.delete", LD_ROLE_USER},
+        {"holiday.list", LD_ROLE_USER},
+        {"holiday.create", LD_ROLE_USER},
+        {"holiday.update", LD_ROLE_USER},
+        {"holiday.delete", LD_ROLE_USER},
+        {"subject.list", LD_ROLE_USER},
+        {"subject.create", LD_ROLE_USER},
+        {"subject.update", LD_ROLE_USER},
+        {"subject.delete", LD_ROLE_USER},
+        {"class.list", LD_ROLE_USER},
+        {"class.create", LD_ROLE_USER},
+        {"class.update", LD_ROLE_USER},
+        {"class.delete", LD_ROLE_USER},
+        {"travel.get", LD_ROLE_USER},
+        {"travel.set", LD_ROLE_USER},
+        {"travel.delete", LD_ROLE_USER},
+        {"travel.setDefault", LD_ROLE_USER},
     };
 
     CHECK_EQ(command_count, (int) (sizeof(expected) / sizeof(expected[0])));

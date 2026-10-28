@@ -22,6 +22,14 @@ typedef struct {
 int conflict_check(uint16_t user_id, const occurrence_t *candidates, int n, uint32_t ignore_source_id,
                    conflict_t *out, int max);
 
+// Ghi {from, to, items, conflicts, truncated?} của user_id vào out, như phản hồi calendar.range (from..to tối đa
+// SCHED_MAX_RANGE_DAYS ngày, bên gọi tự kiểm tra). item_budget: số byte JSON tối đa của items, quá thì
+// "truncated": true; TCP dùng CALENDAR_TCP_ITEM_BUDGET (khung 8 KB), HTTP không bị giới hạn khung nên dùng lớn hơn.
+// Trả LD_OK hoặc mã lỗi kèm thông báo trong out (ld_fail). Tự khoá dữ liệu, gọi được từ task khác task TCP.
+#define CALENDAR_TCP_ITEM_BUDGET 5800
+struct cJSON;
+int calendar_range_json(uint16_t user_id, int32_t from, int32_t to, int item_budget, struct cJSON *out);
+
 #ifdef ESP_PLATFORM
 void calendar_init(void);       // nạp /data/conflict_ack.json và đăng ký lệnh calendar.*, conflict.*
 #endif

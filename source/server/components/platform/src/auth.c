@@ -1,4 +1,4 @@
-// Đăng nhập challenge–response và quản lý tài khoản (TV1). Đặc tả: README mục 5.4.1, docs/protocol.md.
+// Đăng nhập challenge–response cho tài khoản duy nhất (TV1). Đặc tả: README mục 5.4.1, docs/protocol.md.
 //
 //   client → auth.challenge {user}                 server → {nonce, salt, iter}
 //   client tính key = PBKDF2(mật khẩu, salt, iter), proof = HMAC-SHA256(key, nonce)
@@ -50,7 +50,7 @@ static void format_date(int32_t day, char out[11])
     snprintf(out, 11, "%04u-%02u-%02u", y % 10000, m % 100, d % 100);
 }
 
-// Đọc {salt, iter, key} do app gửi khi tạo tài khoản hoặc đổi mật khẩu
+// Đọc {salt, iter, key} do app gửi khi đổi mật khẩu
 static int read_secret(const cJSON *data, cJSON *out, uint8_t salt[LD_SALT_LEN], uint8_t key[LD_KEY_LEN],
                        uint32_t *iter)
 {
@@ -138,7 +138,7 @@ static int cmd_login(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
     ld_random(rnd, sizeof(rnd));
     session_create(u.id, now, rnd, token);
     tcp_client_set_user(ctx->client, u.id);
-    ESP_LOGI(TAG, "%s dang nhap (%s)", u.name, users_role_to_str(u.role));
+    ESP_LOGI(TAG, "%s dang nhap", u.name);
 
     cJSON_AddStringToObject(out, "token", token);
     int32_t today = time_today();
@@ -152,7 +152,6 @@ static int cmd_login(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
     cJSON *user = cJSON_AddObjectToObject(out, "user");
     cJSON_AddNumberToObject(user, "id", u.id);
     cJSON_AddStringToObject(user, "name", u.name);
-    cJSON_AddStringToObject(user, "role", users_role_to_str(u.role));
     cJSON_AddBoolToObject(out, "mustChangePassword", u.must_change);
     return LD_OK;
 }
@@ -165,48 +164,17 @@ static int cmd_logout(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
     return LD_OK;
 }
 
-// auth.password {salt, iter, key, user?}: tự đổi mật khẩu; admin truyền "user" để đặt lại mật khẩu người khác
+// auth.password {salt, iter, key}: đổi mật khẩu, mọi token cũ hết hiệu lực
 static int cmd_password(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
 {
     uint8_t salt[LD_SALT_LEN], key[LD_KEY_LEN];
     uint32_t iter;
     int r = read_secret(data, out, salt, key, &iter);
     if (r != LD_OK) return r;
-
-    uint16_t target = ctx->user_id;
-    const char *name = ld_get_str(data, "user");
-    if (name) {
-        ld_user_t u = {0};
-        if (!users_find(name, &u)) return ld_fail(out, LD_ERR_NOT_FOUND, "Khong co tai khoan nay", "user");
-        if (u.id != ctx->user_id && ctx->role < LD_ROLE_ADMIN)
-            return ld_fail(out, LD_ERR_FORBIDDEN, "Chi admin duoc dat lai mat khau nguoi khac", "user");
-        target = u.id;
-    }
-    // Admin đặt lại mật khẩu người khác thì người đó phải đổi ở lần đăng nhập tới
-    r = users_set_password(target, salt, key, iter, target != ctx->user_id);
+    r = users_set_password(ctx->user_id, salt, key, iter, false);
     if (r != LD_OK) return ld_fail(out, r, "Khong luu duoc mat khau", NULL);
-    session_remove_user(target);                            // mọi token cũ của người đó hết hiệu lực
-    if (target == ctx->user_id) tcp_client_set_user(ctx->client, 0);
-    return LD_OK;
-}
-
-// auth.register {user, role, salt, iter, key} (admin) → {id}
-static int cmd_register(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
-{
-    const char *name = ld_get_str(data, "user");
-    if (!valid_name(name)) return ld_fail(out, LD_ERR_BAD_ARG, "Ten dang nhap 3..32 ky tu A-Z a-z 0-9 . _ -", "user");
-    uint8_t role = users_role_from_str(ld_get_str(data, "role"));
-    if (role == LD_ROLE_NONE) return ld_fail(out, LD_ERR_BAD_ARG, "role la admin, teacher hoac student", "role");
-    uint8_t salt[LD_SALT_LEN], key[LD_KEY_LEN];
-    uint32_t iter;
-    int r = read_secret(data, out, salt, key, &iter);
-    if (r != LD_OK) return r;
-    uint16_t id;
-    r = users_create(name, role, salt, key, iter, &id);
-    if (r == LD_ERR_CONFLICT) return ld_fail(out, r, "Ten dang nhap da ton tai", "user");
-    if (r != LD_OK) return ld_fail(out, r, "Khong tao duoc tai khoan", NULL);
-    cJSON_AddNumberToObject(out, "id", id);
-    ld_push_changed("user", id);
+    session_remove_user(ctx->user_id);
+    tcp_clients_logout_user(ctx->user_id);       // kể cả kết nối khác: không nhận tin đẩy bằng phiên đã huỷ nữa
     return LD_OK;
 }
 
@@ -218,29 +186,7 @@ static int cmd_me(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
     cJSON *user = cJSON_AddObjectToObject(out, "user");
     cJSON_AddNumberToObject(user, "id", u.id);
     cJSON_AddStringToObject(user, "name", u.name);
-    cJSON_AddStringToObject(user, "role", users_role_to_str(u.role));
     cJSON_AddBoolToObject(out, "mustChangePassword", u.must_change);
-    return LD_OK;
-}
-
-// auth.users (admin) → {users:[{id, name, role, mustChangePassword}]}
-static int cmd_users(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
-{
-    users_list_json(cJSON_AddArrayToObject(out, "users"));
-    return LD_OK;
-}
-
-// auth.remove {user} (admin)
-static int cmd_remove(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
-{
-    ld_user_t u = {0};
-    const char *name = ld_get_str(data, "user");
-    if (!users_find(name, &u)) return ld_fail(out, LD_ERR_NOT_FOUND, "Khong co tai khoan nay", "user");
-    if (u.id == ctx->user_id) return ld_fail(out, LD_ERR_BAD_ARG, "Khong tu xoa tai khoan dang dung", "user");
-    int r = users_delete(u.id);
-    if (r != LD_OK) return ld_fail(out, r, "Khong xoa duoc tai khoan", NULL);
-    session_remove_user(u.id);
-    ld_push_changed("user", u.id);
     return LD_OK;
 }
 
@@ -248,10 +194,7 @@ void auth_register_cmds(void)
 {
     ld_register_cmd("auth.challenge", cmd_challenge, LD_ROLE_NONE);
     ld_register_cmd("auth.login", cmd_login, LD_ROLE_NONE);
-    ld_register_cmd("auth.logout", cmd_logout, LD_ROLE_STUDENT);
-    ld_register_cmd("auth.me", cmd_me, LD_ROLE_STUDENT);
-    ld_register_cmd("auth.password", cmd_password, LD_ROLE_STUDENT);
-    ld_register_cmd("auth.register", cmd_register, LD_ROLE_ADMIN);
-    ld_register_cmd("auth.users", cmd_users, LD_ROLE_ADMIN);
-    ld_register_cmd("auth.remove", cmd_remove, LD_ROLE_ADMIN);
+    ld_register_cmd("auth.logout", cmd_logout, LD_ROLE_USER);
+    ld_register_cmd("auth.me", cmd_me, LD_ROLE_USER);
+    ld_register_cmd("auth.password", cmd_password, LD_ROLE_USER);
 }

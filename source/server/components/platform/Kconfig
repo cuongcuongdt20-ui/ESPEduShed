@@ -16,6 +16,12 @@ menu "ESPEduShed - Platform (TV1)"
         int "So client TCP toi da"
         range 1 10
         default 8
+    config LD_DDNS_DOMAIN
+        string "DuckDNS: ten mien (phan truoc .duckdns.org), de trong de tat"
+        default ""
+    config LD_DDNS_TOKEN
+        string "DuckDNS: token"
+        default ""
     config LD_BOOT_BUTTON_GPIO
         int "GPIO nut BOOT (giu 3 giay luc khoi dong de vao che do AP)"
         default 0

@@ -112,6 +112,19 @@ static bool json_time(const cJSON *obj, const char *key, uint16_t *out,
     return dt_parse_hm(buf, out);
 }
 
+// Màu tuỳ chọn (file ghi trước khi có màu riêng thì không có trường này): thiếu thì để rỗng
+static bool json_color(const cJSON *obj, char out[8])
+{
+    const cJSON *v = cJSON_GetObjectItemCaseSensitive(obj, "color");
+    out[0] = 0;
+    if (!v || cJSON_IsNull(v)) return true;
+    if (!cJSON_IsString(v) || !v->valuestring) return false;
+    size_t n = strlen(v->valuestring);
+    if (n != 0 && (n != 7 || v->valuestring[0] != '#')) return false;
+    memcpy(out, v->valuestring, n + 1);
+    return true;
+}
+
 static bool json_bool(const cJSON *obj, const char *key, bool *out)
 {
     const cJSON *v = cJSON_GetObjectItemCaseSensitive(obj, key);
@@ -144,8 +157,9 @@ static bool parse_series(const cJSON *v, sched_series_t *s)
     if (!json_int(v, "id", 1, UINT32_MAX, &n)) return false;
     s->id = (uint32_t)n;
 
+    // Chỉ còn một tài khoản: dữ liệu cũ của tài khoản khác cũng thuộc về tài khoản đó
     if (!json_int(v, "ownerId", 1, UINT16_MAX, &n)) return false;
-    s->owner_id = (uint16_t)n;
+    s->owner_id = LD_OWNER_ID;
 
     if (!json_int(v, "classId", 0, UINT16_MAX, &n)) return false;
     s->class_id = (uint16_t)n;
@@ -158,6 +172,7 @@ static bool parse_series(const cJSON *v, sched_series_t *s)
                      sizeof(s->class_code))) return false;
     if (!json_string(v, "room", s->room, sizeof(s->room))) return false;
     if (!json_string(v, "note", s->note, sizeof(s->note))) return false;
+    if (!json_color(v, s->color)) return false;
 
     if (!json_int(v, "credits", 0, UINT8_MAX, &n)) return false;
     s->credits = (uint8_t)n;
@@ -209,7 +224,7 @@ static bool parse_task(const cJSON *v, sched_task_t *t)
     if (!json_int(v, "id", 1, UINT32_MAX, &n)) return false;
     t->id = (uint32_t)n;
     if (!json_int(v, "ownerId", 1, UINT16_MAX, &n)) return false;
-    t->owner_id = (uint16_t)n;
+    t->owner_id = LD_OWNER_ID;
     if (!json_int(v, "type", 0, UINT8_MAX, &n)) return false;
     t->type = (uint8_t)n;
 
@@ -218,6 +233,7 @@ static bool parse_task(const cJSON *v, sched_task_t *t)
         return false;
     if (!json_string(v, "place", t->place, sizeof(t->place))) return false;
     if (!json_string(v, "note", t->note, sizeof(t->note))) return false;
+    if (!json_color(v, t->color)) return false;
 
     if (!json_date(v, "day", &t->day)) return false;
 
@@ -481,6 +497,7 @@ static bool add_series_json(cJSON *a, const sched_series_t *s)
         return false;
     }
     ADD_STR("note", s->note);
+    ADD_STR("color", s->color);
 
     if (!add_time(o, "start", s->start_min) ||
         !add_time(o, "end", s->end_min) ||
@@ -513,6 +530,7 @@ static bool add_task_json(cJSON *a, const sched_task_t *t)
     ADD_NUM("campusId", t->campus_id);
     ADD_STR("place", t->place);
     ADD_STR("note", t->note);
+    ADD_STR("color", t->color);
 
     if (!add_date(o, "day", t->day)) return false;
 

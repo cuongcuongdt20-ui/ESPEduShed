@@ -1,15 +1,13 @@
-// Trạng thái phiên dùng chung cho toàn app (TV1): đang nối server nào, ai đang đăng nhập.
+// Trạng thái phiên dùng chung cho toàn app (TV1): đang nối server nào, đã đăng nhập chưa.
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
-import type { Role, SessionInfo } from '../../electron/shared'
+import type { SessionInfo } from '../../electron/shared'
 import { api } from './api'
 
 interface SessionCtx extends SessionInfo {
   ready: boolean
   refresh: () => Promise<void>
-  hasRole: (min: Role) => boolean
 }
 
-const RANK: Record<Role, number> = { student: 1, teacher: 2, admin: 3 }
 const Ctx = createContext<SessionCtx | null>(null)
 
 export function SessionProvider({ children }: { children: ReactNode }) {
@@ -26,8 +24,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return api.onConnection(() => refresh())       // nối lại xong main process có thể đã tự đăng nhập lại
   }, [refresh])
 
-  const hasRole = (min: Role) => !!info.user && RANK[info.user.role] >= RANK[min]
-  return <Ctx.Provider value={{ ...info, ready, refresh, hasRole }}>{children}</Ctx.Provider>
+  return <Ctx.Provider value={{ ...info, ready, refresh }}>{children}</Ctx.Provider>
 }
 
 export function useSession(): SessionCtx {

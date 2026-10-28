@@ -57,7 +57,7 @@ Project hướng tới các mục tiêu cụ thể:
 2. **Thiết kế Custom Application Protocol & Framing:** Xây dựng cơ chế đóng/tách khung (Length-prefixed binary framing: 4-byte Big-Endian length + JSON payload) nhằm giải quyết triệt để vấn đề ranh giới thông điệp trên dòng byte stream của TCP.
 3. **Đồng bộ thời gian thực (Server Push):** Cho phép máy chủ chủ động đẩy thông báo thay đổi (`push notification`) đến tất cả các Client đang kết nối khi có dữ liệu được tạo mới hoặc cập nhật.
 4. **Service Discovery tự động:** Thiết kế giao thức UDP Broadcast (port 5001) và mDNS (`espedushed.local`) để Client tự động tìm thấy máy chủ trong mạng LAN mà người dùng không cần gõ địa chỉ IP thủ công.
-5. **Bảo mật ứng dụng tầng mạng:** Hiện thực quy trình xác thực **Challenge–Response** (sử dụng Salt, PBKDF2-HMAC-SHA256, Replay-resistant Nonce), Token phiên ngẫu nhiên trong RAM, cơ chế chống tấn công Brute-force và kiểm soát truy cập theo vai trò (RBAC: Admin, Teacher, Student).
+5. **Bảo mật ứng dụng tầng mạng:** Hiện thực quy trình xác thực **Challenge–Response** (sử dụng Salt, PBKDF2-HMAC-SHA256, Replay-resistant Nonce), Token phiên ngẫu nhiên trong RAM, cơ chế chống tấn công Brute-force. Hệ thống dành cho **một người dùng** (một tài khoản duy nhất).
 6. **Xử lý nghiệp vụ phức tạp trên chip nhúng:** Quy đổi tiết linh hoạt theo từng trường, tự động tính toán thời gian di chuyển giữa các cơ sở, phát hiện xung đột lịch (Conflict Detection), mở rộng chuỗi lịch định kỳ kèm ngoại lệ (`sched_expand`) và lưu trữ an toàn chống mất điện (Atomic file write trên LittleFS).
 7. **Ứng dụng Client hiện đại:** Xây dựng ứng dụng Desktop Client bằng Electron + React + TypeScript với kiến trúc cách ly tiến trình (Context Isolation), giao tiếp Main–Renderer an toàn qua IPC, hiển thị thời khóa biểu trực quan qua FullCalendar.
 
@@ -69,6 +69,8 @@ Project hướng tới các mục tiêu cụ thể:
   - TCP Server port 5000: Quản lý tối đa 8 kết nối đồng thời qua `select()`.
   - UDP Broadcast port 5001 & mDNS: Khám phá dịch vụ trong mạng LAN.
   - Giao thức nhị phân ghép khung 4-byte length prefix + JSON UTF-8 payload.
+  - HTTP port 8080: trang web chỉ đọc xem lịch trên điện thoại, bảo vệ bằng link bí mật.
+  - Truy cập từ mạng ngoài (4G, Wi-Fi khác) qua port forwarding trên router + tên miền động DuckDNS do ESP32 tự cập nhật.
 - **Nghiệp vụ lịch & công việc:**
   - Quản lý trường, cơ sở, cấu hình bảng tiết độc lập cho từng trường, ma trận khoảng cách di chuyển, ngày nghỉ lễ.
   - Quản lý lịch dạy định kỳ (theo tiết hoặc theo giờ thực), công việc (nhiệm vụ, deadline cá nhân), ngoại lệ buổi (huỷ, đổi giờ, dời ngày, dạy bù).
@@ -78,7 +80,8 @@ Project hướng tới các mục tiêu cụ thể:
 - **Kiểm thử & Đánh giá:** Bộ test host chạy bằng GCC trên máy tính giả lập logic, kiểm thử phân mảnh gói tin TCP (fragmentation & concatenation), đo lường độ trễ (latency), thông lượng (throughput) và mức tiêu thụ tài nguyên.
 
 ### Out of scope
-- Ứng dụng di động (Mobile App) – nhóm thống nhất tập trung hoàn thiện phiên bản Desktop Client chuyên sâu cho giảng viên và sinh viên.
+- Ứng dụng di động (Mobile App) – điện thoại chỉ xem lịch qua trang web của ESP32, mọi thao tác sửa làm trên app Desktop.
+- Nhiều tài khoản và phân quyền – hệ thống phục vụ một người dùng.
 - Mã hóa toàn bộ kênh truyền TLS/SSL – do hạn chế tài nguyên RAM của ESP32 khi chạy đồng thời nhiều kết nối TCP và thuật toán lịch; thay vào đó nhóm bảo vệ bằng cơ chế xác thực Challenge–Response và định hướng mạng LAN tin cậy.
 - Đồng bộ hóa qua Cloud công cộng của bên thứ ba.
 
@@ -116,9 +119,11 @@ Hệ thống **ESPEduShed** gồm 2 thành phần chính:
 
 ## 3.2. Target Users
 
-1. **Administrator (Quản trị viên hệ thống):** Thiết lập cấu hình hệ thống, Wi-Fi, quản lý tài khoản người dùng, cấu hình danh mục trường đại học, bảng tiết học chuẩn và ngày nghỉ chung.
-2. **Teacher (Giảng viên):** Người tạo và theo dõi lịch giảng dạy định kỳ theo tiết/giờ tại nhiều trường, quản lý lịch công tác, lịch thi, xử lý các tình huống dạy bù/đổi lịch và theo dõi xung đột thời gian di chuyển.
-3. **Student (Sinh viên):** Quản lý thời khóa biểu học tập cá nhân, theo dõi công việc học tập, bài tập lớn, hạn chót nộp báo cáo (Deadlines), tránh trùng lịch giữa các môn học.
+Hệ thống dành cho **một người dùng** (ví dụ một giảng viên dạy ở nhiều trường), dùng một tài khoản duy nhất:
+- Cấu hình Wi-Fi, danh mục trường, cơ sở, bảng tiết, ngày nghỉ, thời gian di chuyển.
+- Tạo và theo dõi lịch giảng dạy định kỳ theo tiết/giờ tại nhiều trường, lịch công tác, lịch thi; xử lý dạy bù/đổi lịch; theo dõi xung đột thời gian di chuyển.
+- Quản lý công việc cá nhân và hạn chót (Deadlines).
+- Xem lịch trên điện thoại ở bất kỳ đâu qua link bí mật.
 
 ## 3.3. Main Functions
 
@@ -132,11 +137,13 @@ Trạng thái: **Đã code** = có mã nguồn chạy được, chưa thử trê
 | | Tin đẩy | Server đẩy `{"push":"changed"}` tới các client đã đăng nhập | Đã code |
 | **Bảo mật (TV1)** | Đăng nhập challenge–response | PBKDF2-HMAC-SHA256, mật khẩu không đi trên mạng | Đã code, có test phía client |
 | | Chống gửi lại và dò mật khẩu | `nonce` một lần (30 giây); khoá IP 60 giây sau 5 lần sai | Đã code, có test |
-| | Phiên và vai trò | Token 16 byte trong RAM, 3 vai trò `admin` / `teacher` / `student` | Đã code, có test |
-| | Tài khoản | Tạo, xoá, đặt lại mật khẩu; admin lần đầu phải đổi mật khẩu | Đã code |
+| | Phiên | Token 16 byte trong RAM, một tài khoản duy nhất | Đã code, có test |
+| | Tài khoản | Mật khẩu ngẫu nhiên in ra serial lần đầu, bắt đổi ở lần đăng nhập đầu | Đã code |
 | **Nền tảng (TV1)** | Wi-Fi | STA tự nối lại; AP cài đặt `ESPEduShed-XXXX` và lệnh `system.wifi` | Đã code |
 | | Lưu trữ | LittleFS, ghi file tạm rồi đổi tên; sao lưu / khôi phục theo mẩu 4 KB | Đã code |
 | | Trạng thái server | `system.status`: RAM, số kết nối, số yêu cầu, handler chậm nhất | Đã code |
+| | DuckDNS | ESP32 tự báo IP công khai mỗi 5 phút, lệnh `system.ddns` | Đã code |
+| **Web xem lịch** | Trang lịch trên điện thoại | HTTP 8080, link bí mật `web.link` / `web.rotate`, giao diện giống trang Lịch của app | Đã code |
 | **Tìm server (TV2)** | UDP broadcast, mDNS | Cổng 5001, `espedushed.local`, tối đa 10 trả lời/giây | Đã code |
 | **Danh mục (TV2)** | Trường, cơ sở, bảng tiết, quy đổi tiết, di chuyển, ngày nghỉ, môn, lớp | 25 lệnh, lưu `/data/catalog.json` | Đã code, có test logic |
 | **Lịch (TV3)** | Lịch dạy định kỳ, công việc / hạn chót, ngoại lệ (huỷ, đổi phòng, đổi giờ, dời, dạy bù), sinh buổi | Kiểm tra trùng ở server, `force` để lưu đè | Đã code, có test logic |
@@ -410,7 +417,7 @@ Hệ thống định nghĩa bảng mã lỗi chuẩn toàn hệ thống:
 | `UNKNOWN_CMD` | Lệnh không tồn tại trong bảng đăng ký lệnh (`ld_register_cmd`) | Trả về mã lỗi kèm tên lệnh sai, ghi nhận log cảnh báo trên Serial Monitor. |
 | `BAD_ARG` | Dữ liệu đầu vào thiếu trường bắt buộc hoặc sai kiểu/miền giá trị | Chỉ rõ trường bị lỗi trong thuộc tính `field` của phản hồi lỗi. |
 | `UNAUTHORIZED` | Không có Token hoặc Token đã hết hạn / không hợp lệ | Client tự động hủy Token cũ trong `safeStorage` và điều hướng về trang Login. |
-| `FORBIDDEN` | Người dùng không đủ quyền thực hiện lệnh (RBAC) | Từ chối thực thi; ví dụ: Sinh viên cố gắng tạo lịch giảng dạy của Giảng viên. |
+| `FORBIDDEN` | Chưa đổi mật khẩu ban đầu | Từ chối mọi lệnh trừ `auth.password`, `auth.logout`, `auth.me`, `system.ping`, `system.status`. |
 | `NOT_FOUND` | Không tìm thấy tài nguyên hoặc tài nguyên thuộc sở hữu người khác | Trả về `NOT_FOUND` (che giấu việc tài nguyên có tồn tại hay không vì lý do bảo mật). |
 | `CONFLICT` | Trùng lịch giảng dạy hoặc vi phạm thời gian di chuyển giữa 2 cơ sở | Trả về danh sách chi tiết các lịch bị xung đột trong `data.conflicts`; cho phép Client gửi lại với `"force": true` để ghi đè có chủ đích. |
 | `FULL` | Bộ nhớ lưu trữ Flash LittleFS hoặc RAM bị đầy | Ngăn chặn ghi thêm bản ghi mới; thông báo người dùng dọn dẹp hoặc sao lưu dữ liệu. |
@@ -454,7 +461,7 @@ Hầu hết các đồ án môn học hoặc giải pháp quản lý lịch hi�
 1. **Máy chủ chạy hoàn toàn trên ESP32-S3:** server ứng dụng, nghiệp vụ lịch và lưu trữ đều nằm trên vi điều khiển. Laptop chỉ là client, không có backend nào trên máy tính làm thay.
 2. **Giao thức ứng dụng tự thiết kế trên TCP thuần:** khung tin "4 byte độ dài + JSON" giải quyết bài toán ranh giới thông điệp trên luồng byte TCP; mỗi khung chỉ tốn thêm 4 byte so với nội dung, kết nối giữ lâu dài và server chủ động đẩy tin thay đổi tới các client.
 3. **Phục vụ nhiều client bằng `select()` trên một task FreeRTOS:** không tạo task riêng cho mỗi kết nối, nên RAM thêm cho mỗi client chỉ là bộ đệm ghép khung (cấp đúng độ dài khi đang nhận dở một khung, trả lại ngay sau khi xử lý) và hàng đợi gửi.
-4. **Bảo mật mức ứng dụng phù hợp tài nguyên ESP32:** đăng nhập challenge–response (mật khẩu không đi trên mạng, chống gửi lại gói), token trong RAM, chặn dò mật khẩu theo IP, phân quyền theo vai trò và quyền sở hữu dữ liệu, thay cho TLS vốn tốn khoảng 10–15 KB RAM mỗi kết nối.
+4. **Bảo mật mức ứng dụng phù hợp tài nguyên ESP32:** đăng nhập challenge–response (mật khẩu không đi trên mạng, chống gửi lại gói), token trong RAM, chặn dò mật khẩu theo IP, thay cho TLS vốn tốn khoảng 10–15 KB RAM mỗi kết nối.
 5. **Nghiệp vụ lịch nhiều trường trên vi điều khiển:** bảng tiết riêng cho từng trường, quy đổi tiết sang giờ, lịch lặp kèm ngoại lệ, kiểm tra trùng lịch và thời gian di chuyển giữa các cơ sở, viết bằng C và test được trên máy tính.
 
 ## 7.3. Contributions
@@ -507,20 +514,22 @@ ESPEduShed/
     │   │   │   └── src/
     │   │   │       ├── tcp_server.c       socket, bind, listen, select(), accept, hàng đợi gửi, tin đẩy, hết thời gian chờ
     │   │   │       ├── frame.c            Ghép khung 4 byte độ dài + JSON (logic thuần)
-    │   │   │       ├── protocol.c         Phân tích {id, cmd, token, data}, bảng lệnh, kiểm tra token và vai trò
+    │   │   │       ├── protocol.c         Phân tích {id, cmd, token, data}, bảng lệnh, kiểm tra token
     │   │   │       ├── session.c          Token phiên trong RAM (logic thuần)
     │   │   │       ├── limiter.c          Chặn dò mật khẩu theo IP (logic thuần)
-    │   │   │       ├── auth.c             Lệnh auth.*: challenge–response, tài khoản
-    │   │   │       ├── users.c            Tài khoản, vai trò, /data/users.json, admin lần đầu
+    │   │   │       ├── auth.c             Lệnh auth.*: challenge–response, đổi mật khẩu
+    │   │   │       ├── users.c            Tài khoản duy nhất, /data/users.json, mật khẩu đầu
     │   │   │       ├── crypto.c           HMAC-SHA256, PBKDF2 (mbedTLS)
     │   │   │       ├── wifi.c             STA, AP cài đặt, lệnh system.wifi
     │   │   │       ├── time_svc.c         SNTP, múi giờ UTC+7
     │   │   │       ├── storage.c          LittleFS, ghi file nguyên tử
-    │   │   │       └── system_cmd.c       Lệnh system.ping, status, backup, restore
+    │   │   │       ├── system_cmd.c       Lệnh system.ping, status, backup, restore
+    │   │   │       └── ddns.c             Cập nhật DuckDNS, lệnh system.ddns
     │   │   ├── discovery/                 (TV2) UDP 5001 và mDNS (hiện là bản giả)
     │   │   ├── catalog/                   (TV2) Trường, bảng tiết, ngày nghỉ, thư viện ngày giờ dt
     │   │   ├── schedule/                  (TV3) Lịch dạy, công việc, ngoại lệ, sinh buổi
-    │   │   └── calendar/                  (TV4) Kiểm tra trùng, lịch tuần
+    │   │   ├── calendar/                  (TV4) Kiểm tra trùng, lịch tuần
+    │   │   └── webview/                   Web xem lịch trên điện thoại (HTTP 8080, web/calendar.html)
     │   └── test_host/                     Test logic C bằng gcc trên máy tính (Makefile, mỗi người một thư mục)
     ├── client/                            App desktop Electron + React + TypeScript
     │   ├── package.json, electron.vite.config.ts, tailwind.config.ts, electron-builder.yml, index.html
@@ -535,7 +544,7 @@ ESPEduShed/
     │   └── src/                           Giao diện React
     │       ├── App.tsx, main.tsx          Gắn router và route của các module              (TV1)
     │       ├── core/                      Khung app, api.ts, phiên, component UI, trang kết nối,
-    │       │                              đăng nhập, đổi mật khẩu, tài khoản, trạng thái  (TV1)
+    │       │                              đăng nhập, đổi mật khẩu, truy cập từ xa, trạng thái (TV1)
     │       ├── catalog/                   (TV2)    schedule/  (TV3)    calendar/  (TV4)
     └── tools/                             Công cụ Python (chỉ thư viện chuẩn)              (TV1)
         ├── espproto.py                    Ghép khung và challenge–response dùng chung
@@ -601,7 +610,7 @@ data,     data, spiffs,  ,       3M
 
 | File trên ESP | Module | Nội dung |
 | :--- | :--- | :--- |
-| `/data/users.json` | TV1 | Tài khoản: tên, vai trò, salt, key (PBKDF2), cờ phải đổi mật khẩu |
+| `/data/users.json` | TV1 | Tài khoản duy nhất: salt, key (PBKDF2), cờ phải đổi mật khẩu |
 | `/data/catalog.json` | TV2 | Trường, cơ sở, bảng tiết, ngày nghỉ, môn, lớp |
 | `/data/schedule.json` | TV3 | Lịch dạy, công việc, ngoại lệ |
 
@@ -610,7 +619,7 @@ mỗi dòng sau một bản ghi có trường `"k"` (loại bản ghi). Ghi và 
 thành một cây JSON khi dữ liệu đầy cần hàng trăm KB, vượt RAM của ESP32 (đã đo). File dạng cũ (`schema: 1`, một object)
 vẫn đọc được. Mọi lần ghi đi qua task ghi riêng (`store_save_later`), gom thay đổi trong 1 giây và đổi tên nguyên tử.
 | `/data/conflict_ack.json` | TV4 | Xung đột người dùng đã xác nhận |
-| NVS `wifi`, `auth` | TV1 | Cấu hình Wi-Fi; mật khẩu admin ban đầu (xoá khi admin đổi mật khẩu) |
+| NVS `wifi`, `auth`, `ddns`, `web` | TV1 | Cấu hình Wi-Fi; mật khẩu ban đầu (xoá khi đổi mật khẩu); DuckDNS; khoá link xem lịch |
 
 Xoá toàn bộ dữ liệu: `idf.py erase-flash` rồi nạp lại firmware.
 
@@ -624,7 +633,10 @@ Xoá toàn bộ dữ liệu: `idf.py erase-flash` rồi nạp lại firmware.
 | `LD_AP_PASS` | `espedushed` | Mật khẩu Wi-Fi AP cài đặt `ESPEduShed-XXXX` |
 | `LD_TCP_PORT` | 5000 | Cổng TCP của server |
 | `LD_MAX_CLIENTS` | 8 | Số kết nối tối đa |
+| `LD_DDNS_DOMAIN`, `LD_DDNS_TOKEN` | rỗng | DuckDNS mặc định (đổi được trong app, mục Truy cập từ xa) |
 | `LD_BOOT_BUTTON_GPIO` | 0 | Nút giữ 3 giây lúc khởi động để vào chế độ AP |
+
+**ESPEduShed - Web xem lich**: `LD_HTTP_PORT` (mặc định 8080), cổng của trang web xem lịch.
 
 ---
 
@@ -639,10 +651,11 @@ idf.py build
 idf.py -p COM5 flash monitor          # thay COM5 bằng cổng của bo mạch
 ```
 
-Lần chạy đầu, log serial in tài khoản admin ban đầu:
+Lần chạy đầu, log serial in mật khẩu ban đầu (link xem lịch không in ra log, lấy trong app mục **Truy cập từ xa**):
 
 ```text
-W (1234) users:   Tai khoan admin ban dau: admin / Ab3dEf9h
+W (1234) users:   Mat khau ban dau: Ab3dEf9h
+I (1300) web: web xem lich o cong 8080, lay link trong app (muc Truy cap tu xa)
 ```
 
 - Chưa cấu hình Wi-Fi: ESP phát Wi-Fi `ESPEduShed-XXXX` (mật khẩu `espedushed`), server ở `192.168.4.1:5000`. Laptop nối vào Wi-Fi đó rồi gửi cấu hình:
@@ -652,6 +665,24 @@ W (1234) users:   Tai khoan admin ban dau: admin / Ab3dEf9h
   ```
 
 - Đã có Wi-Fi: log in `co IP 192.168.x.y, TCP cong 5000`.
+
+## 11.1b. Truy cập từ mạng ngoài (4G, Wi-Fi khác)
+
+Hướng dẫn từng bước kèm xử lý sự cố: [`docs/huong-dan-truy-cap-tu-xa.md`](docs/huong-dan-truy-cap-tu-xa.md). Tóm tắt:
+
+1. **IP cố định trong LAN:** trên router, đặt DHCP reservation (gán IP tĩnh theo MAC) cho ESP32.
+2. **Port forwarding:** mở TCP **5000** (app) và TCP **8080** (web) từ WAN về IP đó.
+3. **Kiểm tra CGNAT:** so IP WAN hiện trên trang quản trị router với IP ở whatismyip.com. Khác nhau nghĩa là nhà mạng
+   dùng CGNAT, mở cổng không có tác dụng; gọi nhà mạng xin IP public (Viettel, VNPT, FPT thường hỗ trợ).
+   ESP32 bắt Wi-Fi phát từ điện thoại (4G) cũng không mở cổng được, khi đó chỉ các máy cùng Wi-Fi đó vào được.
+4. **DuckDNS:** tạo tên miền miễn phí ở duckdns.org, rồi trong app vào **Truy cập từ xa** nhập tên và token.
+   ESP32 tự cập nhật IP mỗi 5 phút. Router đã có DDNS riêng thì bỏ qua bước này.
+5. **App:** ở ngoài mạng nhà, màn hình kết nối nhập `ten.duckdns.org`, cổng 5000.
+6. **Điện thoại:** trong app vào **Truy cập từ xa**, bấm **Sao chép link** và gửi cho điện thoại, ví dụ
+   `http://ten.duckdns.org:8080/c/<khoá>`. Lộ link thì bấm **Đổi link**.
+
+Lưu ý: kênh truyền không mã hoá. Mật khẩu không đi trên mạng, nhưng nội dung lịch, token và link xem lịch có thể bị
+nghe lén trên Wi-Fi công cộng. Dùng mật khẩu mạnh.
 
 ## 11.2. Start Client
 
@@ -672,12 +703,12 @@ git push origin client-v1.0.1
 
 GitHub Actions ([`release-client.yml`](.github/workflows/release-client.yml)) chạy test, build bản cài và đưa lên Releases kèm `latest.yml`. Bản cài chưa ký số nên Windows SmartScreen sẽ cảnh báo lần cài đầu ("More info" → "Run anyway").
 
-Màn hình đầu tiên: nhập IP của ESP (hoặc bấm tìm trong LAN khi TV2 làm xong UDP discovery) → đăng nhập `admin` → đổi mật khẩu bắt buộc ở lần đầu.
+Màn hình đầu tiên: nhập IP hoặc tên DDNS của ESP (hoặc bấm tìm trong LAN) → nhập mật khẩu → đổi mật khẩu bắt buộc ở lần đầu.
 
 **Chưa có ESP32:** chạy server giả lập rồi cho app nối vào `127.0.0.1:5000`:
 
 ```bash
-python source/tools/fake_server.py --dev      # admin / admin123
+python source/tools/fake_server.py --dev      # mật khẩu admin123
 ```
 
 ## 11.3. Start Multiple Clients
@@ -686,7 +717,7 @@ python source/tools/fake_server.py --dev      # admin / admin123
 - Hoặc dùng công cụ dòng lệnh để giữ một client chờ tin đẩy:
 
   ```bash
-  python source/tools/tcp_client.py --host 192.168.1.37 --user admin --password <mat_khau> --listen 120
+  python source/tools/tcp_client.py --host 192.168.1.37 --password <mat_khau> --listen 120
   ```
 
 ## 11.4. Run Test
@@ -721,14 +752,14 @@ Trạng thái ghi đúng tình hình hiện tại. "Đã kiểm thử" chỉ ghi
 
 | No. | Feature | Description | Test |
 | :-: | :--- | :--- | :--- |
-| 0 | Build firmware | Toàn bộ firmware (5 component) | Build đạt với ESP-IDF 5.5.6, không cảnh báo trong code của nhóm; `espedushed.bin` 881 648 byte (phân vùng app còn trống 58%). Chưa nạp lên bo mạch |
+| 0 | Build firmware | Toàn bộ firmware (6 component, thêm webview) | Build đạt với ESP-IDF 5.5.6, không cảnh báo trong code của nhóm; `espedushed.bin` 1 257 840 byte (phân vùng app còn trống 40%). Chưa nạp lên bo mạch |
 | 1 | Ghép khung TCP | Khung bị cắt từng byte, nhiều khung dính, khung quá 8 KB | Đạt trên máy tính: `npm test` (client); `loadtest.py fragment` với `fake_server.py`. Chưa chạy trên ESP32 |
 | 2 | Giới hạn 8 kết nối | Kết nối thứ 9 nhận `BUSY` | Đạt với `fake_server.py` (`loadtest.py maxconn`). Chưa chạy trên ESP32 |
 | 3 | Đăng nhập challenge–response | Mật khẩu không đi trên mạng | PBKDF2/HMAC phía client khớp vector chuẩn (`npm test`). Chưa chạy với ESP32 |
 | 4 | Chống gửi lại gói đăng nhập | `nonce` dùng một lần | Đạt với `fake_server.py` (`loadtest.py replay`). Chưa chạy trên ESP32 |
 | 5 | Chặn dò mật khẩu | Sai 5 lần, khoá IP 60 giây | Test logic `make platform` (cần gcc); đạt với `fake_server.py` |
 | 6 | Bắt đổi mật khẩu lần đầu | Mọi lệnh khác trả `FORBIDDEN` | Đạt với `fake_server.py` |
-| 7 | Tin đẩy thời gian thực | Thêm tài khoản ở client A, client B nhận `changed` | Đạt với `fake_server.py` (test tích hợp `TcpClient`) |
+| 7 | Tin đẩy thời gian thực | Sửa lịch ở client A, client B nhận `changed` | Đạt với `fake_server.py` (test tích hợp `TcpClient`) |
 | 8 | Tự nối lại khi mất kết nối | App thử lại mỗi 2 giây, tự đăng nhập lại nếu ESP đã khởi động lại | Đạt với `fake_server.py` (tắt rồi bật lại server) |
 | 9 | Wi-Fi AP cài đặt, sao lưu / khôi phục | `system.wifi`, `system.backup`, `system.restore` | Đã viết, chưa chạy trên ESP32 |
 | 10 | Danh mục trường, bảng tiết (TV2) | Quy đổi tiết, tiết không liên tục, 25 lệnh CRUD | `make catalog` đạt 19/19, `make catalog_cmd` đạt 178/178 trên máy tính. Chưa chạy trên ESP32 |
@@ -814,7 +845,9 @@ Viết sau khi có số liệu ở mục 14. Các câu hỏi cần trả lời:
 
 1. **Số kết nối:** tối đa 8 client, do số socket của lwIP và RAM của ESP32-S3.
 2. **Kích thước phản hồi:** mỗi khung tối đa 8 KB, nên truy vấn lịch giới hạn 62 ngày mỗi lần; sao lưu đi theo từng mẩu 4 KB.
-3. **Kênh truyền chưa mã hoá:** mật khẩu không đi trên mạng, nhưng dữ liệu lịch và token thì có. Khi tạo tài khoản hoặc đổi mật khẩu, `key` đi trên mạng một lần. Chỉ phù hợp mạng LAN tin cậy.
+3. **Kênh truyền chưa mã hoá:** mật khẩu không đi trên mạng, nhưng dữ liệu lịch, token và link xem lịch thì có. Khi đổi mật khẩu, `key` đi trên mạng một lần. Khi mở cổng ra Internet, nên tránh Wi-Fi công cộng.
+7. **Truy cập từ xa cần IP public:** nhà mạng dùng CGNAT (hoặc ESP32 bắt Wi-Fi 4G từ điện thoại) thì không mở cổng được.
+8. **Web xem lịch qua HTTP thường:** khoá bí mật nằm trong URL nên ai nghe lén được đường truyền (Wi-Fi công cộng, proxy) đều đọc được link; khi nghi lộ thì bấm **Đổi link**. Trang chỉ đọc, tự tải lại mỗi phút chứ không nhận tin đẩy. FullCalendar nhúng trong firmware (`/fc.js`), không tải từ CDN.
 4. **Phiên mất khi ESP khởi động lại:** token lưu trong RAM; app tự đăng nhập lại nếu còn mở, nếu đã tắt thì người dùng đăng nhập lại.
 5. **Không có giờ thực khi chạy ở chế độ AP:** không có Internet để đồng bộ SNTP, app phải gửi ngày cần xem.
 6. **Các handler chạy tuần tự:** một lệnh xử lý lâu làm các client khác chờ.
@@ -875,11 +908,12 @@ Báo cáo viết theo cấu trúc ở `INSTRUCTION.md` của học phần và ph
 ## 21.2. Demo Steps
 
 1. App tìm thấy ESP qua UDP (hoặc nhập IP).
-2. Admin đăng nhập bằng mật khẩu in trên serial, đổi mật khẩu, tạo tài khoản giảng viên và sinh viên.
+2. Đăng nhập bằng mật khẩu in trên serial, đổi mật khẩu.
 3. Tạo 2 trường có bảng tiết khác nhau.
-4. Giảng viên nhập lịch dạy ở cả hai trường và thấy cảnh báo trùng.
+4. Nhập lịch dạy ở cả hai trường và thấy cảnh báo trùng.
 5. Huỷ một buổi, thêm buổi bù.
-6. Sinh viên thêm hạn nộp báo cáo.
+6. Thêm hạn nộp báo cáo (công việc có hạn chót).
+6b. Mở link xem lịch trên điện thoại (dùng 4G): thấy đúng lịch tuần như trên app.
 7. Hai laptop cùng mở: sửa ở máy này, máy kia tự cập nhật nhờ tin đẩy.
 8. Rút điện ESP: app chuyển "Mất kết nối", thử nối lại mỗi 2 giây; cắm lại, app tự nối và đăng nhập lại, dữ liệu còn nguyên.
 9. Mở log serial, giải thích các dòng kết nối, đóng kết nối, đăng nhập sai.

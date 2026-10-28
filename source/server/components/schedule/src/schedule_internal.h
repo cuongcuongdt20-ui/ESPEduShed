@@ -17,7 +17,7 @@ typedef enum { EXC_CANCEL = 1, EXC_ROOM = 2, EXC_TIME = 3, EXC_MOVE = 4, EXC_MAK
 // Lịch dạy định kỳ. Giờ thực KHÔNG lưu: tính bằng catalog_period_to_time mỗi lần sinh buổi.
 typedef struct {
     uint32_t id;
-    uint16_t owner_id;           // người tạo (ctx->user_id); mỗi người chỉ thấy lịch của mình
+    uint16_t owner_id;           // ctx->user_id, luôn là LD_OWNER_ID vì chỉ có một tài khoản
     uint16_t class_id;           // 0 nếu nhập trực tiếp các trường bên dưới
     char     subject_code[17];
     char     subject_name[65];
@@ -33,6 +33,7 @@ typedef struct {
     int32_t  from, to;           // khoảng áp dụng
     bool     weekly;             // false = chỉ diễn ra một lần vào ngày from
     char     note[121];
+    char     color[8];           // "#RRGGBB" chọn trong bảng màu của app; "" = dùng màu của trường
 } sched_series_t;
 
 typedef struct {
@@ -48,6 +49,7 @@ typedef struct {
     char     place[65];
     uint8_t  status;             // 0 chưa làm, 1 đang làm, 2 xong, 3 huỷ
     char     note[121];
+    char     color[8];           // "#RRGGBB"; "" = màu mặc định
 } sched_task_t;
 
 // Ngoại lệ của một buổi, khoá (series_id, orig_day)

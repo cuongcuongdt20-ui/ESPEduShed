@@ -3,7 +3,6 @@
 import { ClipboardList, Plus } from 'lucide-react'
 import type { ModuleRoute } from '../core/routes'
 import { useList } from '../core/api'
-import { useSession } from '../core/session'
 import { Button } from '../core/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../core/components/ui/card'
 import { DAY_NAMES, TASK_STATUS, TASK_TYPES } from './dialogs'
@@ -40,8 +39,6 @@ function Table({ headers, rows, cells, onOpen, empty }: {
 }
 
 function SchedulesPage() {
-  const { hasRole } = useSession()
-  const teacher = hasRole('teacher')
   const series = useList<Row>('schedule.list', 'schedules', ['schedule', 'exception'])
   const tasks = useList<Row>('task.list', 'tasks', ['task'])
   const schools = useList<Row>('school.list', 'schools', ['school'])
@@ -49,33 +46,31 @@ function SchedulesPage() {
 
   return (
     <div className="space-y-5">
-      {teacher && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Lịch dạy định kỳ</CardTitle>
-            <Button size="sm" onClick={() => openEditor({ mode: 'series' })}><Plus className="h-4 w-4" /> Thêm lịch dạy</Button>
-          </CardHeader>
-          <CardContent>
-            {series.loading && !series.data && <p className="mb-2 text-sm text-muted-foreground">Đang tải lịch dạy…</p>}
-            {series.error && <p className="mb-2 text-sm text-destructive">{series.error}</p>}
-            <Table
-              headers={['Học phần', 'Lớp', 'Trường', 'Thứ', 'Giờ', 'Phòng', 'Thời gian áp dụng']}
-              rows={series.data ?? []}
-              cells={[
-                (s) => <><b>{s.subject_code}</b> {s.subject_name}</>,
-                (s) => s.class_code,
-                (s) => schoolName(s.school_id),
-                (s) => (s.weekly ? DAY_NAMES[s.day_of_week] : 'Một lần'),
-                (s) => (s.time_mode === 0 ? `Tiết ${s.period_start}–${s.period_start + s.period_count - 1}` : `${s.start}–${s.end}`),
-                (s) => s.room,
-                (s) => (s.weekly ? `${fmtDay(s.date_from)} – ${fmtDay(s.date_to)}` : fmtDay(s.date_from)),
-              ]}
-              onOpen={(s) => openEditor({ mode: 'series', id: s.id })}
-              empty="Chưa có lịch dạy. Bấm Thêm lịch dạy, hoặc kéo vùng trống trên trang Lịch tuần."
-            />
-          </CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Lịch dạy định kỳ</CardTitle>
+          <Button size="sm" onClick={() => openEditor({ mode: 'series' })}><Plus className="h-4 w-4" /> Thêm lịch dạy</Button>
+        </CardHeader>
+        <CardContent>
+          {series.loading && !series.data && <p className="mb-2 text-sm text-muted-foreground">Đang tải lịch dạy…</p>}
+          {series.error && <p className="mb-2 text-sm text-destructive">{series.error}</p>}
+          <Table
+            headers={['Học phần', 'Lớp', 'Trường', 'Thứ', 'Giờ', 'Phòng', 'Thời gian áp dụng']}
+            rows={series.data ?? []}
+            cells={[
+              (s) => <><b>{s.subject_code}</b> {s.subject_name}</>,
+              (s) => s.class_code,
+              (s) => schoolName(s.school_id),
+              (s) => (s.weekly ? DAY_NAMES[s.day_of_week] : 'Một lần'),
+              (s) => (s.time_mode === 0 ? `Tiết ${s.period_start}–${s.period_start + s.period_count - 1}` : `${s.start}–${s.end}`),
+              (s) => s.room,
+              (s) => (s.weekly ? `${fmtDay(s.date_from)} – ${fmtDay(s.date_to)}` : fmtDay(s.date_from)),
+            ]}
+            onOpen={(s) => openEditor({ mode: 'series', id: s.id })}
+            empty="Chưa có lịch dạy. Bấm Thêm lịch dạy, hoặc kéo vùng trống trên trang Lịch tuần."
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">

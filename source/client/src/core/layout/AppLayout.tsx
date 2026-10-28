@@ -9,8 +9,6 @@ import { Badge } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { cn } from '../lib/utils'
 
-const ROLE_TEXT = { admin: 'Quản trị', teacher: 'Giảng viên', student: 'Sinh viên' }
-
 function useTheme(): [boolean, () => void] {
   const [dark, setDark] = useState(() => {
     try {
@@ -34,7 +32,7 @@ export function AppLayout({ routes, children }: { routes: ModuleRoute[]; childre
   const s = useSession()
   const navigate = useNavigate()
   const [dark, toggleTheme] = useTheme()
-  const menu = routes.filter((r) => r.menu && (!r.minRole || s.hasRole(r.minRole)))
+  const menu = routes.filter((r) => r.menu)
 
   async function logout() {
     await api.logout()
@@ -67,12 +65,6 @@ export function AppLayout({ routes, children }: { routes: ModuleRoute[]; childre
           ))}
         </nav>
         <div className="border-t p-3 text-sm">
-          {s.user && (
-            <div className="mb-2 px-2">
-              <div className="font-medium">{s.user.name}</div>
-              <div className="text-xs text-muted-foreground">{ROLE_TEXT[s.user.role]}</div>
-            </div>
-          )}
           <div className="flex gap-1">
             <Button variant="ghost" size="icon" title="Đổi giao diện sáng / tối" onClick={toggleTheme}>
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}

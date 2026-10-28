@@ -11,13 +11,12 @@ function subscribe<T>(channel: string, cb: (v: T) => void): () => void {
 
 contextBridge.exposeInMainWorld('espRaw', {
   connect: (host: string, port: number) => ipcRenderer.invoke('api:connect', host, port),
-  login: (user: string, password: string) => ipcRenderer.invoke('api:login', user, password),
+  login: (password: string) => ipcRenderer.invoke('api:login', password),
   logout: () => ipcRenderer.invoke('api:logout'),
   request: (cmd: string, data?: object) => ipcRenderer.invoke('api:request', cmd, data),
   discover: (timeoutMs?: number) => ipcRenderer.invoke('api:discover', timeoutMs),
   session: () => ipcRenderer.invoke('api:session'),
-  changePassword: (password: string, user?: string) => ipcRenderer.invoke('api:changePassword', password, user),
-  createUser: (user: string, role: string, password: string) => ipcRenderer.invoke('api:createUser', user, role, password),
+  changePassword: (password: string) => ipcRenderer.invoke('api:changePassword', password),
   printToPdf: (defaultName: string) => ipcRenderer.invoke('api:printToPdf', defaultName),
   onPush: (cb: (msg: PushMessage) => void) => subscribe('api:push', cb),
   onConnection: (cb: (state: ConnState) => void) => subscribe('api:state', cb),

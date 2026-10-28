@@ -20,7 +20,7 @@ void schedule_seed_sample(void)
     sched_series_t *s = &g_sched.series[g_sched.n_series++];
     memset(s, 0, sizeof(*s));
     s->id = 1;
-    s->owner_id = 1;             // tài khoản admin tạo lần đầu (id 1)
+    s->owner_id = 1;             // LD_OWNER_ID: tài khoản duy nhất
     strcpy(s->subject_code, "INT1433");
     strcpy(s->subject_name, "Lap trinh mang");
     strcpy(s->class_code, "N01");
@@ -73,6 +73,27 @@ bool sched_label(uint32_t source_id, uint8_t kind, char title[65], char room[17]
             class_code[0] = 0;
             found = true;
         }
+    }
+    ld_unlock(g_sched_lock);
+    return found;
+}
+
+bool sched_color(uint32_t source_id, uint8_t kind, char color[8])
+{
+    bool found = false;
+    ld_lock(g_sched_lock);
+    if (kind == OCC_TEACH || kind == OCC_MAKEUP) {
+        for (int i = 0; i < g_sched.n_series && !found; i++)
+            if (g_sched.series[i].id == source_id && g_sched.series[i].color[0]) {
+                memcpy(color, g_sched.series[i].color, 8);
+                found = true;
+            }
+    } else if (kind == OCC_TASK) {
+        for (int i = 0; i < g_sched.n_tasks && !found; i++)
+            if (g_sched.tasks[i].id == source_id && g_sched.tasks[i].color[0]) {
+                memcpy(color, g_sched.tasks[i].color, 8);
+                found = true;
+            }
     }
     ld_unlock(g_sched_lock);
     return found;

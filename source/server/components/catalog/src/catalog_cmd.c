@@ -725,29 +725,29 @@ static int travel_set_default(const ld_ctx_t *ctx, const cJSON *data, cJSON *out
 
 void catalog_register_cmds(void)
 {
-    ld_register_cmd("school.list", school_list, LD_ROLE_STUDENT);
-    ld_register_cmd("school.create", school_create, LD_ROLE_TEACHER);
-    ld_register_cmd("school.update", school_update, LD_ROLE_TEACHER);
-    ld_register_cmd("school.delete", school_delete, LD_ROLE_TEACHER);
-    ld_register_cmd("periods.set", periods_set, LD_ROLE_TEACHER);
-    ld_register_cmd("campus.list", campus_list, LD_ROLE_STUDENT);
-    ld_register_cmd("campus.create", campus_create, LD_ROLE_TEACHER);
-    ld_register_cmd("campus.update", campus_update, LD_ROLE_TEACHER);
-    ld_register_cmd("campus.delete", campus_delete, LD_ROLE_TEACHER);
-    ld_register_cmd("holiday.list", holiday_list, LD_ROLE_STUDENT);
-    ld_register_cmd("holiday.create", holiday_create, LD_ROLE_TEACHER);
-    ld_register_cmd("holiday.update", holiday_update, LD_ROLE_TEACHER);
-    ld_register_cmd("holiday.delete", holiday_delete, LD_ROLE_TEACHER);
-    ld_register_cmd("subject.list", subject_list, LD_ROLE_STUDENT);
-    ld_register_cmd("subject.create", subject_create, LD_ROLE_TEACHER);
-    ld_register_cmd("subject.update", subject_update, LD_ROLE_TEACHER);
-    ld_register_cmd("subject.delete", subject_delete, LD_ROLE_TEACHER);
-    ld_register_cmd("class.list", class_list, LD_ROLE_STUDENT);
-    ld_register_cmd("class.create", class_create, LD_ROLE_TEACHER);
-    ld_register_cmd("class.update", class_update, LD_ROLE_TEACHER);
-    ld_register_cmd("class.delete", class_delete, LD_ROLE_TEACHER);
-    ld_register_cmd("travel.get", travel_get, LD_ROLE_STUDENT);
-    ld_register_cmd("travel.set", travel_set, LD_ROLE_TEACHER);
-    ld_register_cmd("travel.delete", travel_delete, LD_ROLE_TEACHER);
-    ld_register_cmd("travel.setDefault", travel_set_default, LD_ROLE_TEACHER);
+    ld_register_cmd("school.list", school_list, LD_ROLE_USER);
+    ld_register_cmd("school.create", school_create, LD_ROLE_USER);
+    ld_register_cmd("school.update", school_update, LD_ROLE_USER);
+    ld_register_cmd("school.delete", school_delete, LD_ROLE_USER);
+    ld_register_cmd("periods.set", periods_set, LD_ROLE_USER);
+    ld_register_cmd("campus.list", campus_list, LD_ROLE_USER);
+    ld_register_cmd("campus.create", campus_create, LD_ROLE_USER);
+    ld_register_cmd("campus.update", campus_update, LD_ROLE_USER);
+    ld_register_cmd("campus.delete", campus_delete, LD_ROLE_USER);
+    ld_register_cmd("holiday.list", holiday_list, LD_ROLE_USER);
+    ld_register_cmd("holiday.create", holiday_create, LD_ROLE_USER);
+    ld_register_cmd("holiday.update", holiday_update, LD_ROLE_USER);
+    ld_register_cmd("holiday.delete", holiday_delete, LD_ROLE_USER);
+    ld_register_cmd("subject.list", subject_list, LD_ROLE_USER);
+    ld_register_cmd("subject.create", subject_create, LD_ROLE_USER);
+    ld_register_cmd("subject.update", subject_update, LD_ROLE_USER);
+    ld_register_cmd("subject.delete", subject_delete, LD_ROLE_USER);
+    ld_register_cmd("class.list", class_list, LD_ROLE_USER);
+    ld_register_cmd("class.create", class_create, LD_ROLE_USER);
+    ld_register_cmd("class.update", class_update, LD_ROLE_USER);
+    ld_register_cmd("class.delete", class_delete, LD_ROLE_USER);
+    ld_register_cmd("travel.get", travel_get, LD_ROLE_USER);
+    ld_register_cmd("travel.set", travel_set, LD_ROLE_USER);
+    ld_register_cmd("travel.delete", travel_delete, LD_ROLE_USER);
+    ld_register_cmd("travel.setDefault", travel_set_default, LD_ROLE_USER);
 }

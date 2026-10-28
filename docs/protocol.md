@@ -69,12 +69,13 @@ và phần 2 (lệnh `auth.*`, `system.*`) do TV1 viết và đã cài đặt tr
 | `BUSY` | Đủ kết nối, hoặc IP đang bị chặn vì sai mật khẩu nhiều lần |
 | `INTERNAL` | Lỗi server, hoặc lệnh chưa làm |
 
-App thêm hai mã phía client: `OFFLINE` (chưa kết nối hoặc mất kết nối) và `TIMEOUT` (5 giây không có phản hồi).
+App thêm hai mã phía client: `OFFLINE` (chưa kết nối hoặc mất kết nối) và `TIMEOUT` (10 giây không có phản hồi).
 
-### 1.5 Vai trò
+### 1.5 Quyền
 
-`student` (1) < `teacher` (2) < `admin` (3). Mỗi lệnh có vai trò tối thiểu; "công khai" nghĩa là không cần token.
-Tài khoản đang bị bắt đổi mật khẩu chỉ được dùng `auth.password`, `auth.logout`, `auth.me`, `system.ping`,
+Server chỉ có **một tài khoản** (tên `admin`). Lệnh chia hai loại: "công khai" (không cần token) và "đăng nhập" (cần
+token hợp lệ). Mọi lịch, công việc, xung đột đều thuộc tài khoản đó.
+Khi đang bị bắt đổi mật khẩu chỉ được dùng `auth.password`, `auth.logout`, `auth.me`, `system.ping`,
 `system.status`.
 
 ### 1.6 Kiểu dữ liệu
@@ -101,46 +102,51 @@ client                                                   server
 
 - Mật khẩu không đi trên mạng. Server chỉ lưu `salt`, `iter`, `key`.
 - `nonce` dùng một lần, gắn với kết nối đã xin nó: gửi lại gói `auth.login` cũ (kể cả trên kết nối khác) đều bị từ chối.
-- Tài khoản không tồn tại vẫn nhận `salt` (giả, cố định theo tên) để không dò được tên nào có thật.
+- App luôn gửi `user = "admin"`. Tên khác vẫn nhận `salt` (giả, cố định theo tên) nhưng không đăng nhập được.
 - Một IP sai 5 lần trong 60 giây thì bị chặn 60 giây.
 - `nonce` sai, hết hạn, sai tên hay sai mật khẩu đều trả cùng một thông báo `UNAUTHORIZED`.
 
 ### 2.2 Bảng lệnh `auth.*`
 
-| Lệnh | Vai trò | `data` gửi | `data` nhận | Lỗi riêng |
+| Lệnh | Quyền | `data` gửi | `data` nhận | Lỗi riêng |
 |---|---|---|---|---|
 | `auth.challenge` | công khai | `{user}` | `{nonce, salt, iter}` | `BUSY` (IP bị chặn), `BAD_ARG` |
-| `auth.login` | công khai | `{user, nonce, proof}` | `{token, expiresAt, user: {id, name, role}, mustChangePassword}` | `UNAUTHORIZED`, `BUSY` |
-| `auth.logout` | student | – | `{}` | |
-| `auth.me` | student | – | `{user: {id, name, role}, mustChangePassword}` | `UNAUTHORIZED` |
-| `auth.password` | student | `{salt, iter, key, user?}` | `{}` | `FORBIDDEN` (đổi của người khác mà không phải admin), `NOT_FOUND` |
-| `auth.register` | admin | `{user, role, salt, iter, key}` | `{id}` | `CONFLICT` (trùng tên), `FULL` (quá 32 tài khoản) |
-| `auth.users` | admin | – | `{users: [{id, name, role, mustChangePassword}]}` | |
-| `auth.remove` | admin | `{user}` | `{}` | `NOT_FOUND`, `BAD_ARG` (tự xoá mình) |
+| `auth.login` | công khai | `{user, nonce, proof}` | `{token, expiresAt, user: {id, name}, mustChangePassword}` | `UNAUTHORIZED`, `BUSY` |
+| `auth.logout` | đăng nhập | – | `{}` | |
+| `auth.me` | đăng nhập | – | `{user: {id, name}, mustChangePassword}` | `UNAUTHORIZED` |
+| `auth.password` | đăng nhập | `{salt, iter, key}` | `{}` | |
 
-- `user`: 3..32 ký tự `A-Z a-z 0-9 . _ -`. `role`: `admin`, `teacher`, `student`.
+- `user`: 3..32 ký tự `A-Z a-z 0-9 . _ -`.
 - `salt`: 32 ký tự hex (16 byte). `key`: 64 ký tự hex (32 byte). `iter`: 1000..200000, app dùng 10000.
 - `expiresAt`: ngày hết hạn của token (7 ngày), `null` khi ESP chưa đồng bộ giờ.
-- `auth.password` không có `user`: đổi mật khẩu của mình. Có `user` (admin): đặt lại mật khẩu người khác, người đó phải
-  đổi lại ở lần đăng nhập tới. Sau khi đổi, mọi token cũ của người đó mất hiệu lực.
-- `auth.register`: tài khoản mới luôn có `mustChangePassword = true`.
-- Tin đẩy: `auth.register`, `auth.remove` đẩy `{"push":"changed","entity":"user","id":<id>}`.
+- Lần đầu chạy, ESP tạo tài khoản với mật khẩu ngẫu nhiên in ra cổng serial, `mustChangePassword = true`.
+- Sau `auth.password`, mọi token cũ mất hiệu lực và mọi kết nối thôi nhận tin đẩy; app tự đăng nhập lại bằng mật khẩu mới.
 
 ### 2.3 Bảng lệnh `system.*`
 
-| Lệnh | Vai trò | `data` gửi | `data` nhận |
+| Lệnh | Quyền | `data` gửi | `data` nhận |
 |---|---|---|---|
 | `system.ping` | công khai | – | `{pong}` (ms từ lúc ESP khởi động) |
-| `system.status` | công khai | – | `{name, fw, mode, ip, rssi?, uptimeS, timeSynced, clients, maxClients, sessions, heapFree, heapMin, heapLargest, requests, errors, maxHandlerUs, dataTotal, dataUsed}` |
-| `system.wifi` | công khai ở chế độ AP, admin ở chế độ STA | `{ssid, pass}` | `{restarting: true}`, ESP khởi động lại sau 1,5 giây |
-| `system.backup` | admin | `{}` | `{files: [{name, size}]}` |
-| `system.backup` | admin | `{file, offset}` | `{file, offset, size, data, eof}`; `data` là base64 của tối đa 4096 byte |
-| `system.restore` | admin | `{file, offset, data, last?, reboot?}` | `{written, restarting?}` |
+| `system.status` | công khai | – | `{name, fw, mode, ip, rssi?, uptimeS, timeSynced, clients, maxClients, sessions, heapFree, heapMin, heapLargest, requests, errors, maxHandlerUs, dataTotal, dataUsed, ddns?}`; `ddns: {domain, lastOk?, lastAgoS?}` chỉ có khi đã đăng nhập |
+| `system.wifi` | công khai ở chế độ AP, đăng nhập ở chế độ STA | `{ssid, pass}` | `{restarting: true}`, ESP khởi động lại sau 1,5 giây |
+| `system.ddns` | đăng nhập | `{domain, token}` (`domain` rỗng thì tắt; nhận cả `ten` lẫn `ten.duckdns.org`) | `{}`; ESP gửi cập nhật DuckDNS ngay, sau đó mỗi 5 phút |
+| `system.backup` | đăng nhập | `{}` | `{files: [{name, size}]}` |
+| `system.backup` | đăng nhập | `{file, offset}` | `{file, offset, size, data, eof}`; `data` là base64 của tối đa 4096 byte |
+| `system.restore` | đăng nhập | `{file, offset, data, last?, reboot?}` | `{written, restarting?}` |
 
 - `system.status` dùng cho trang trạng thái của app và cho đo thực nghiệm (RAM, số yêu cầu, handler chậm nhất).
 - Sao lưu / khôi phục đi theo từng mẩu 4 KB vì một khung tối đa 8 KB. `file` chỉ gồm chữ thường, số, `_`, đuôi `.json`.
   Khôi phục ghi vào `<file>.restore`, mẩu cuối (`last: true`) mới đổi tên đè file thật. Khôi phục xong file cuối thì
   gửi `reboot: true` để mọi module nạp lại dữ liệu.
+
+### 2.4 Bảng lệnh `web.*` (link xem lịch trên điện thoại)
+
+| Lệnh | Quyền | `data` gửi | `data` nhận |
+|---|---|---|---|
+| `web.link` | đăng nhập | – | `{key, port}`; link là `http://<địa chỉ>:<port>/c/<key>` |
+| `web.rotate` | đăng nhập | – | `{key, port}` của khoá mới; link cũ trả 404 ngay |
+
+`key` là 32 ký tự hex ngẫu nhiên, lưu NVS. Xem mục 7 về các endpoint HTTP.
 
 ### Phân trang lệnh danh sách
 
@@ -152,46 +158,49 @@ Lý do: khung tin tối đa 8 KB, danh sách dài (ví dụ 16 trường × 20 t
 ## 3. Lệnh của TV2 (`school.*`, `campus.*`, `periods.*`, `holiday.*`, `subject.*`, `class.*`, `travel.*`)
 
 > TV2: `school.list` trả về trường và bảng tiết; các màn hình danh mục gọi thêm `campus.*`, `holiday.*`, `subject.*`, `class.*` và `travel.*`.
-> Mọi lệnh đọc yêu cầu vai trò student trở lên; lệnh thay đổi yêu cầu teacher trở lên (role admin cũng được phép).
+> Mọi lệnh đều cần đăng nhập.
 
-| Lệnh | Vai trò | `data` gửi | `data` nhận | Lỗi riêng |
+| Lệnh | Quyền | `data` gửi | `data` nhận | Lỗi riêng |
 |---|---|---|---|---|
-| `school.list` | student | `{}` | `{schools: [{id, name, shortName, color, periods: [{no, start, end}]}]}` | |
-| `school.create` / `school.update` | teacher | `{name, shortName, color}` / thêm `id` | `{id}` | `BAD_ARG`, `FULL`, `CONFLICT` |
-| `school.delete` | teacher | `{id}` | `{}` | `NOT_FOUND`, `CONFLICT` nếu lịch đang dùng trường |
-| `campus.list` | student | `{schoolId?}` | `{campuses: [{id, schoolId, name, address}]}` | |
-| `campus.create` / `campus.update` / `campus.delete` | teacher | trường/cơ sở tương ứng | `{id}` hoặc `{}` | `BAD_ARG`, `NOT_FOUND`, `FULL` |
-| `periods.set` | teacher | `{schoolId, periods: [{no, start, end}]}` | `{}` | `BAD_ARG` nếu giờ sai, tiết trùng hoặc chồng lấn |
-| `holiday.list` | student | `{schoolId?}` | `{holidays: [{id, schoolId, name, fromDate, toDate}]}` | |
-| `holiday.create` / `holiday.update` / `holiday.delete` | teacher | `{schoolId, name, from, to}` (`YYYY-MM-DD`; `schoolId: 0` áp dụng tất cả trường); sửa/xoá thêm `id` | `{id}` hoặc `{}` | `BAD_ARG`, `NOT_FOUND`, `FULL` |
-| `subject.list` | student | `{}` | `{subjects: [{id, code, name, credits}]}` | |
-| `subject.create` / `subject.update` / `subject.delete` | teacher | `{code, name, credits}`; sửa/xoá thêm `id` | `{id}` hoặc `{}` | `BAD_ARG`, `NOT_FOUND`, `CONFLICT` (trùng mã môn, hoặc xoá môn còn lớp) |
-| `class.list` | student | `{schoolId?}` | `{classes: [{id, code, subjectId, schoolId, size}]}` | |
-| `class.create` / `class.update` / `class.delete` | teacher | `{code, subjectId, schoolId, size}`; sửa/xóa thêm `id` | `{id}` hoặc `{}` | `BAD_ARG`, `NOT_FOUND`, `CONFLICT` nếu lịch đang dùng lớp |
-| `travel.get` | student | `{}` | `{travel: [{campusA, campusB, minutes}], defaultTravel}` | |
-| `travel.set` / `travel.delete` | teacher | `{campusA, campusB, minutes}` / `{campusA, campusB}` | `{}` | `BAD_ARG`, `NOT_FOUND`, `FULL` |
-| `travel.setDefault` | teacher | `{minutes}` | `{}` | `BAD_ARG` |
+| `school.list` | đăng nhập | `{}` | `{schools: [{id, name, shortName, color, periods: [{no, start, end}]}]}` | |
+| `school.create` / `school.update` | đăng nhập | `{name, shortName, color}` / thêm `id` | `{id}` | `BAD_ARG`, `FULL`, `CONFLICT` |
+| `school.delete` | đăng nhập | `{id}` | `{}` | `NOT_FOUND`, `CONFLICT` nếu lịch đang dùng trường |
+| `campus.list` | đăng nhập | `{schoolId?}` | `{campuses: [{id, schoolId, name, address}]}` | |
+| `campus.create` / `campus.update` / `campus.delete` | đăng nhập | trường/cơ sở tương ứng | `{id}` hoặc `{}` | `BAD_ARG`, `NOT_FOUND`, `FULL` |
+| `periods.set` | đăng nhập | `{schoolId, periods: [{no, start, end}]}` | `{}` | `BAD_ARG` nếu giờ sai, tiết trùng hoặc chồng lấn |
+| `holiday.list` | đăng nhập | `{schoolId?}` | `{holidays: [{id, schoolId, name, fromDate, toDate}]}` | |
+| `holiday.create` / `holiday.update` / `holiday.delete` | đăng nhập | `{schoolId, name, from, to}` (`YYYY-MM-DD`; `schoolId: 0` áp dụng tất cả trường); sửa/xoá thêm `id` | `{id}` hoặc `{}` | `BAD_ARG`, `NOT_FOUND`, `FULL` |
+| `subject.list` | đăng nhập | `{}` | `{subjects: [{id, code, name, credits}]}` | |
+| `subject.create` / `subject.update` / `subject.delete` | đăng nhập | `{code, name, credits}`; sửa/xoá thêm `id` | `{id}` hoặc `{}` | `BAD_ARG`, `NOT_FOUND`, `CONFLICT` (trùng mã môn, hoặc xoá môn còn lớp) |
+| `class.list` | đăng nhập | `{schoolId?}` | `{classes: [{id, code, subjectId, schoolId, size}]}` | |
+| `class.create` / `class.update` / `class.delete` | đăng nhập | `{code, subjectId, schoolId, size}`; sửa/xóa thêm `id` | `{id}` hoặc `{}` | `BAD_ARG`, `NOT_FOUND`, `CONFLICT` nếu lịch đang dùng lớp |
+| `travel.get` | đăng nhập | `{}` | `{travel: [{campusA, campusB, minutes}], defaultTravel}` | |
+| `travel.set` / `travel.delete` | đăng nhập | `{campusA, campusB, minutes}` / `{campusA, campusB}` | `{}` | `BAD_ARG`, `NOT_FOUND`, `FULL` |
+| `travel.setDefault` | đăng nhập | `{minutes}` | `{}` | `BAD_ARG` |
 
 
 ## 4. Lệnh của TV3 (`schedule.*`, `exception.*`, `task.*`, `occurrence.*`)
 
 Các lệnh sử dụng TCP request/response theo giao thức chung. Server xác định chủ sở hữu dữ liệu từ `ctx->user_id`; client không được tự gửi `owner_id` để xác định chủ sở hữu bản ghi.
 
-| Lệnh | Vai trò | `data` gửi | `data` nhận | Lỗi riêng / trạng thái |
+| Lệnh | Quyền | `data` gửi | `data` nhận | Lỗi riêng / trạng thái |
 |---|---|---|---|---|
-| `occurrence.range` | student | `{from, to}` | `{items: [{sourceId, kind, status, date, origDate, start, end, school, campus}]}` | `BAD_ARG` nếu ngày sai, khoảng ngày quá 62 ngày hoặc quá nhiều buổi |
-| `schedule.list` | student | `{}` | `{schedules: [lịch]}`, mỗi lịch `{id, subject_code, subject_name, class_code, class_id, credits, school_id, campus_id, room, size, day_of_week, time_mode, period_start, period_count, start, end, date_from, date_to, weekly, note}` | |
-| `schedule.get` | student | `{id}` | `{schedule: lịch}` | `NOT_FOUND` (không có, hoặc của người khác) |
-| `schedule.create` | teacher | `{subject_code, subject_name, school_id, date_from, date_to, day_of_week, time_mode, period_start, period_count \| start, end, weekly?, class_code?, class_id?, credits?, campus_id?, room?, size?, note?, force?}` | `{id}` | `BAD_ARG`, `CONFLICT` (kèm `conflicts`), `FULL` |
-| `schedule.update` | teacher | như `schedule.create`, thêm `id` | `{id, removedExceptions}` | `BAD_ARG`, `NOT_FOUND`, `CONFLICT` |
-| `schedule.delete` | teacher | `{id}` | `{}` | `NOT_FOUND` |
-| `exception.set` | teacher | `{series_id, orig_date, type, new_date?, new_start?, new_end?, new_room?, note?, force?}` | `{message}` | `BAD_ARG`, `NOT_FOUND`, `CONFLICT`, `FULL` |
-| `exception.delete` | teacher | `{series_id, orig_date}` | `{}` | `NOT_FOUND` |
-| `task.list` | student | `{}` | `{tasks: [{id, type, title, content, day, until, start, end, deadline, campus_id, place, status, note}]}` | |
-| `task.create` | student | `{title, day, start, end \| deadline: true, until?, type?, content?, place?, campus_id?, status?, note?, force?}` | `{id}` | `BAD_ARG`, `CONFLICT`, `FULL` |
-| `task.update` / `task.delete` | student | như `task.create` thêm `id` / `{id}` | `{id}` / `{}` | `BAD_ARG`, `NOT_FOUND`, `CONFLICT` |
+| `occurrence.range` | đăng nhập | `{from, to}` | `{items: [{sourceId, kind, status, date, origDate, start, end, school, campus}]}` | `BAD_ARG` nếu ngày sai, khoảng ngày quá 62 ngày hoặc quá nhiều buổi |
+| `schedule.list` | đăng nhập | `{}` | `{schedules: [lịch]}`, mỗi lịch `{id, subject_code, subject_name, class_code, class_id, credits, school_id, campus_id, room, size, day_of_week, time_mode, period_start, period_count, start, end, date_from, date_to, weekly, note, color}` | |
+| `schedule.get` | đăng nhập | `{id}` | `{schedule: lịch}` | `NOT_FOUND`  |
+| `schedule.create` | đăng nhập | `{subject_code, subject_name, school_id, date_from, date_to, day_of_week, time_mode, period_start, period_count \| start, end, weekly?, class_code?, class_id?, credits?, campus_id?, room?, size?, note?, color?, force?}` | `{id}` | `BAD_ARG`, `CONFLICT` (kèm `conflicts`), `FULL` |
+| `schedule.update` | đăng nhập | như `schedule.create`, thêm `id` | `{id, removedExceptions}` | `BAD_ARG`, `NOT_FOUND`, `CONFLICT` |
+| `schedule.delete` | đăng nhập | `{id}` | `{}` | `NOT_FOUND` |
+| `exception.set` | đăng nhập | `{series_id, orig_date, type, new_date?, new_start?, new_end?, new_room?, note?, force?}` | `{message}` | `BAD_ARG`, `NOT_FOUND`, `CONFLICT`, `FULL` |
+| `exception.delete` | đăng nhập | `{series_id, orig_date}` | `{}` | `NOT_FOUND` |
+| `task.list` | đăng nhập | `{}` | `{tasks: [{id, type, title, content, day, until, start, end, deadline, campus_id, place, status, note, color}]}` | |
+| `task.create` | đăng nhập | `{title, day, start, end \| deadline: true, until?, type?, content?, place?, campus_id?, status?, note?, color?, force?}` | `{id}` | `BAD_ARG`, `CONFLICT`, `FULL` |
+| `task.update` / `task.delete` | đăng nhập | như `task.create` thêm `id` / `{id}` | `{id}` / `{}` | `BAD_ARG`, `NOT_FOUND`, `CONFLICT` |
 
 ### Quy ước trường
+
+- `color` (lịch dạy, công việc): `"#RRGGBB"` chọn từ bảng màu của app, hoặc `""` = không đặt màu riêng (lịch dạy theo màu
+  trường, công việc màu xám). Không gửi thì giữ màu cũ khi sửa. `items[].color` của `calendar.*` là màu riêng nếu có, không thì màu trường.
 
 - Ngày dùng `YYYY-MM-DD`; giờ dùng `HH:MM`.
 - `day_of_week`: 1 = thứ Hai … 7 = Chủ nhật. `weekly: false` là lịch một lần vào `date_from` (bỏ qua `date_to`, `day_of_week`). Lịch lặp kéo dài tối đa 366 ngày.
@@ -206,17 +215,16 @@ Các lệnh sử dụng TCP request/response theo giao thức chung. Server xác
 
 ## 5. Lệnh của TV4 (`calendar.*`, `conflict.*`)
 
-Tất cả lệnh dành cho mọi vai trò (`student` trở lên) và chỉ làm việc trên dữ liệu của chính người đăng nhập
-(`ctx->user_id`). Mã `reason` của xung đột: `1` = trùng giờ, `2` = không đủ thời gian di chuyển giữa hai cơ sở
+Tất cả lệnh cần đăng nhập và làm việc trên dữ liệu của tài khoản duy nhất (`ctx->user_id`). Mã `reason` của xung đột: `1` = trùng giờ, `2` = không đủ thời gian di chuyển giữa hai cơ sở
 (khi đó `start`–`end` là khoảng nghỉ hiện có).
 
-| Lệnh | Vai trò | `data` gửi | `data` nhận | Lỗi riêng |
+| Lệnh | Quyền | `data` gửi | `data` nhận | Lỗi riêng |
 |---|---|---|---|---|
-| `calendar.week` | student | `{date?}` | `{from, to, items, conflicts, truncated?}` | `BAD_ARG` (ESP chưa có giờ mà không gửi `date`) |
-| `calendar.range` | student | `{from, to}` | như `calendar.week` | `BAD_ARG` (quá 62 ngày, hoặc quá nhiều buổi) |
-| `conflict.list` | student | `{from?, to?}` (bỏ trống: tuần hiện tại) | `{from, to, conflicts: [{a, b, date, start, end, reason, acked}], truncated?}`, với `a`, `b` là `{sourceId, kind, title, start, end}` | `BAD_ARG` |
-| `conflict.check` | student | cách 1 (dời buổi có sẵn): `{sourceId, kind?, origDate, curDate?, date, start, end}` (`curDate` = ngày buổi đang nằm, cần khi buổi đã bị dời hoặc là buổi dạy bù; mặc định `origDate`); cách 2 (buổi mới): `{date, start, end, schoolId?, campusId?, ignoreSourceId?}` | `{conflicts: [{with: {sourceId, kind, title, start, end}, date, start, end, reason}]}` (rỗng nếu không trùng); **không** trả lỗi `CONFLICT` | `BAD_ARG`, `NOT_FOUND` (không có buổi đó của người dùng) |
-| `conflict.ack` | student | `{a, b, date}` (mã nguồn của hai buổi) | `{}` | `NOT_FOUND` (cặp này không phải xung đột của người dùng), `FULL` (quá 128 xác nhận) |
+| `calendar.week` | đăng nhập | `{date?}` | `{from, to, items, conflicts, truncated?}` | `BAD_ARG` (ESP chưa có giờ mà không gửi `date`) |
+| `calendar.range` | đăng nhập | `{from, to}` | như `calendar.week` | `BAD_ARG` (quá 62 ngày, hoặc quá nhiều buổi) |
+| `conflict.list` | đăng nhập | `{from?, to?}` (bỏ trống: tuần hiện tại) | `{from, to, conflicts: [{a, b, date, start, end, reason, acked}], truncated?}`, với `a`, `b` là `{sourceId, kind, title, start, end}` | `BAD_ARG` |
+| `conflict.check` | đăng nhập | cách 1 (dời buổi có sẵn): `{sourceId, kind?, origDate, curDate?, date, start, end}` (`curDate` = ngày buổi đang nằm, cần khi buổi đã bị dời hoặc là buổi dạy bù; mặc định `origDate`); cách 2 (buổi mới): `{date, start, end, schoolId?, campusId?, ignoreSourceId?}` | `{conflicts: [{with: {sourceId, kind, title, start, end}, date, start, end, reason}]}` (rỗng nếu không trùng); **không** trả lỗi `CONFLICT` | `BAD_ARG`, `NOT_FOUND` (không có buổi đó của người dùng) |
+| `conflict.ack` | đăng nhập | `{a, b, date}` (mã nguồn của hai buổi) | `{}` | `NOT_FOUND` (cặp này không phải xung đột của người dùng), `FULL` (quá 128 xác nhận) |
 
 **`items`:** mỗi phần tử `{sourceId, kind, status, date, origDate, start, end, title, room, classCode, school, color}`.
 - `kind`: 1 = lịch dạy, 2 = công việc, 3 = dạy bù. `status`: 0 bình thường, 1 đã đổi, 2 đã huỷ, 3 nghỉ lễ.
@@ -235,7 +243,7 @@ Tất cả lệnh dành cho mọi vai trò (`student` trở lên) và chỉ làm
 **Giới hạn phản hồi (khung tối đa 8 KB):** mỗi buổi khoảng 200 byte. Server dừng thêm `items` khi đủ khoảng 5,8 KB và
 đặt `truncated: true`; `conflicts` tối đa 16 mục. App gọi theo từng tuần (7 ngày) nên bình thường không chạm giới hạn.
 
-**Tin đẩy:** `conflict.ack` đẩy `{"push":"changed","entity":"conflict","id":0}` tới các phiên của chính người đó. Lịch thay
+**Tin đẩy:** `conflict.ack` đẩy `{"push":"changed","entity":"conflict","id":0}` tới các phiên đã đăng nhập. Lịch thay
 đổi do TV3 đẩy `schedule` / `task` / `exception`, app tự tải lại.
 
 ## 6. Tìm server qua UDP (TV2)
@@ -246,3 +254,18 @@ ESP    → unicast về địa chỉ người gửi      {"name":"espedushed","i
 ```
 
 Tin không đúng nội dung thì bỏ qua. Tối đa 10 lần trả lời mỗi giây.
+
+## 7. Web xem lịch (HTTP, cổng 8080)
+
+Server HTTP riêng (`esp_http_server`, component `webview`), **chỉ đọc**, không dùng token mà dùng khoá bí mật trong
+đường dẫn (lấy bằng `web.link`).
+
+| Đường dẫn | Trả về |
+|---|---|
+| `GET /c/<key>` | Trang lịch (HTML nhúng trong firmware) |
+| `GET /fc.js` | FullCalendar 6.1.15 + locale vi, nén gzip, nhúng trong firmware; công khai vì không chứa dữ liệu |
+| `GET /api/<key>/range?from=YYYY-MM-DD&to=YYYY-MM-DD` | JSON giống hệt `data` của `calendar.range`; `400 {error}` nếu ngày sai, quá 62 ngày hoặc khoảng có quá nhiều buổi |
+
+- Sai khoá: `404`. Mọi phản hồi có `Cache-Control: no-store` và `Referrer-Policy: no-referrer`.
+- Trang tự tải lại khi chuyển tuần, khi mở lại tab và mỗi 60 giây lúc đang mở.
+- Truy cập từ mạng ngoài: router mở cổng TCP 5000 (app) và 8080 (web) về ESP32, kèm tên miền DDNS (xem README).

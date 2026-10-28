@@ -1,4 +1,5 @@
-// Màn hình kết nối (TV1): tìm ESP32 trong LAN bằng UDP (discovery.ts của TV2) hoặc nhập IP.
+// Màn hình kết nối (TV1): tìm ESP32 trong LAN bằng UDP (discovery.ts của TV2), hoặc nhập IP / tên miền DDNS khi ở
+// ngoài mạng nhà.
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Radar, Server } from 'lucide-react'
@@ -69,7 +70,7 @@ export function ConnectPage() {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Kết nối tới ESPEduShed</CardTitle>
-          <CardDescription>Server chạy trên ESP32-S3 trong cùng mạng Wi-Fi, giao thức TCP cổng 5000.</CardDescription>
+          <CardDescription>Server chạy trên ESP32-S3, giao thức TCP cổng 5000.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="space-y-2">
@@ -96,7 +97,7 @@ export function ConnectPage() {
           <form className="space-y-3" onSubmit={submit}>
             <div className="grid grid-cols-[1fr_100px] gap-3">
               <div className="space-y-1">
-                <Label htmlFor="host">Địa chỉ IP</Label>
+                <Label htmlFor="host">Địa chỉ IP hoặc tên miền</Label>
                 <Input id="host" value={host} onChange={(e) => setHost(e.target.value)} placeholder="192.168.1.37" />
               </div>
               <div className="space-y-1">
@@ -104,6 +105,9 @@ export function ConnectPage() {
                 <Input id="port" value={port} onChange={(e) => setPort(e.target.value)} inputMode="numeric" />
               </div>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Ở ngoài mạng nhà (4G, Wi-Fi khác): nhập tên DDNS, ví dụ ten.duckdns.org. Router nhà phải mở cổng 5000 về ESP32.
+            </p>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full" disabled={busy}>
               Kết nối

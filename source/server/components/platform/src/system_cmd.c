@@ -1,4 +1,4 @@
-// Lệnh hệ thống (TV1): system.ping, system.status, system.backup, system.restore.
+// Lệnh hệ thống (TV1): system.ping, system.status, system.backup, system.restore (system.ddns ở ddns.c).
 //
 // Sao lưu và khôi phục đi theo từng mẩu 4 KB (mã hoá base64), vì mỗi khung TCP tối đa 8 KB:
 //   system.backup {}                         → {files:[{name, size}]}
@@ -69,6 +69,7 @@ static int cmd_status(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
         cJSON_AddNumberToObject(out, "dataTotal", total);
         cJSON_AddNumberToObject(out, "dataUsed", used);
     }
+    if (ctx->user_id) ddns_status_json(out);       // system.status là lệnh công khai: chỉ phiên đã đăng nhập mới thấy
     return LD_OK;
 }
 
@@ -186,6 +187,6 @@ void system_register_cmds(void)
 {
     ld_register_cmd("system.ping", cmd_ping, LD_ROLE_NONE);
     ld_register_cmd("system.status", cmd_status, LD_ROLE_NONE);
-    ld_register_cmd("system.backup", cmd_backup, LD_ROLE_ADMIN);
-    ld_register_cmd("system.restore", cmd_restore, LD_ROLE_ADMIN);
+    ld_register_cmd("system.backup", cmd_backup, LD_ROLE_USER);
+    ld_register_cmd("system.restore", cmd_restore, LD_ROLE_USER);
 }

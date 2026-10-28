@@ -120,6 +120,14 @@ bool sched_label(uint32_t source_id, uint8_t kind, char title[65], char room[17]
     return sched_label_at(source_id, kind, 0, title, room, cls);
 }
 
+bool sched_color(uint32_t source_id, uint8_t kind, char color[8])
+{
+    (void) source_id;
+    (void) kind;
+    (void) color;
+    return false;
+}
+
 bool sched_room_override(uint32_t source_id, int32_t orig_day, char room[17])
 {
     (void) source_id;
@@ -184,7 +192,6 @@ static int invoke(const char *name, uint16_t user_id, const char *json, cJSON *o
     ld_ctx_t ctx;
     memset(&ctx, 0, sizeof(ctx));
     ctx.user_id = user_id;
-    ctx.role = commands[i].role;
     int result = commands[i].fn(&ctx, data, out);
     cJSON_Delete(data);
     return result;
@@ -225,7 +232,7 @@ static void add_occ(const char *date, const char *start, const char *end,
 
 /* ---------- Tests ---------- */
 
-TEST(commands_registered_for_students)
+TEST(commands_registered_for_logged_in_user)
 {
     reset_fixture();
     static const char *names[] = {
@@ -235,7 +242,7 @@ TEST(commands_registered_for_students)
     for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
         int c = find_command(names[i]);
         CHECK(c >= 0);
-        if (c >= 0) CHECK_EQ(commands[c].role, LD_ROLE_STUDENT);
+        if (c >= 0) CHECK_EQ(commands[c].role, LD_ROLE_USER);
     }
 }
 
@@ -260,6 +267,24 @@ TEST(calendar_week_returns_items_and_range)
     CHECK(strcmp(item(first, "title")->valuestring, "Nguon 1") == 0);
     CHECK(strcmp(item(first, "school")->valuestring, "A") == 0);
     cJSON_Delete(out);
+}
+
+// Trang web xem lịch gọi thẳng calendar_range_json: kết quả phải giống hệt lệnh calendar.range
+TEST(calendar_range_json_matches_command)
+{
+    reset_fixture();
+    add_occ("2026-11-02", "08:00", "09:00", 1, 1, OCC_NORMAL);
+    add_occ("2026-11-02", "08:30", "09:30", 2, 1, OCC_NORMAL);
+
+    cJSON *by_cmd = cJSON_CreateObject();
+    CHECK_EQ(invoke("calendar.range", 1, "{\"from\":\"2026-11-02\",\"to\":\"2026-11-08\"}", by_cmd), LD_OK);
+    cJSON *direct = cJSON_CreateObject();
+    CHECK_EQ(calendar_range_json(1, day_of("2026-11-02"), day_of("2026-11-08"), CALENDAR_TCP_ITEM_BUDGET, direct), LD_OK);
+    CHECK(cJSON_Compare(by_cmd, direct, true));
+    CHECK_EQ(array_size(direct, "items"), 2);
+    CHECK_EQ(array_size(direct, "conflicts"), 1);
+    cJSON_Delete(by_cmd);
+    cJSON_Delete(direct);
 }
 
 TEST(calendar_week_uses_esp_date_or_rejects_without_time)
@@ -518,8 +543,9 @@ TEST(conflict_ack_requires_real_pair_and_notifies_owner)
 
 int main(void)
 {
-    RUN(commands_registered_for_students);
+    RUN(commands_registered_for_logged_in_user);
     RUN(calendar_week_returns_items_and_range);
+    RUN(calendar_range_json_matches_command);
     RUN(calendar_week_uses_esp_date_or_rejects_without_time);
     RUN(calendar_range_validates_length);
     RUN(calendar_week_marks_conflicts_unless_acked);

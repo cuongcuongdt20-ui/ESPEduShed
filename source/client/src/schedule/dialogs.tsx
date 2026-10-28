@@ -3,10 +3,10 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { AlertTriangle, Save, Trash2, X } from 'lucide-react'
 import { api, ApiError, errorText, requestAll } from '../core/api'
-import { useSession } from '../core/session'
 import { useToast } from '../core/components/toast'
 import { useConfirm } from '../core/components/confirm'
 import { Button } from '../core/components/ui/button'
+import { ColorPicker } from '../core/components/color-picker'
 import { Input, Label, Select } from '../core/components/ui/input'
 import { onEditorRequest, openEditor, type EditorRequest } from './editor'
 
@@ -110,7 +110,7 @@ function SeriesForm({ id, prefill, onClose }: { id?: number; prefill?: Row; onCl
     const date = String(prefill?.date ?? ymd(new Date()))
     const byTime = !!prefill?.start
     return {
-      subject_code: '', subject_name: '', class_code: '', room: '', note: '',
+      subject_code: '', subject_name: '', class_code: '', room: '', note: '', color: '',
       school_id: '', campus_id: '0', weekly: true, day_of_week: weekdayOf(date),
       time_mode: byTime ? 1 : 0, period_start: '', period_count: 1,
       start: prefill?.start ?? '07:00', end: prefill?.end && prefill.end !== '23:59' ? prefill.end : '08:30',
@@ -144,7 +144,7 @@ function SeriesForm({ id, prefill, onClose }: { id?: number; prefill?: Row; onCl
     setConflicts(null)
     const data: Row = {
       subject_code: f.subject_code.trim(), subject_name: f.subject_name.trim(), class_code: f.class_code ?? '',
-      room: f.room ?? '', note: f.note ?? '', school_id: Number(f.school_id), campus_id: Number(f.campus_id || 0),
+      room: f.room ?? '', note: f.note ?? '', color: f.color ?? '', school_id: Number(f.school_id), campus_id: Number(f.campus_id || 0),
       weekly: !!f.weekly, day_of_week: Number(f.day_of_week), time_mode: Number(f.time_mode),
       date_from: f.date_from, date_to: f.weekly ? f.date_to : f.date_from, force,
     }
@@ -236,6 +236,7 @@ function SeriesForm({ id, prefill, onClose }: { id?: number; prefill?: Row; onCl
           </>
         )}
         <Field label="Ghi chú" wide><Input value={f.note} onChange={(e) => set('note', e.target.value)} /></Field>
+        <Field label="Màu trên lịch" wide><ColorPicker value={f.color ?? ''} onChange={(c) => set('color', c)} noneLabel="Theo màu trường" /></Field>
       </div>
       {conflicts && <div className="mt-3"><ConflictList items={conflicts} onForce={() => void save(true)} /></div>}
       <div className="mt-4 flex justify-between">
@@ -254,7 +255,7 @@ function TaskForm({ id, prefill, onClose }: { id?: number; prefill?: Row; onClos
   const [conflicts, setConflicts] = useState<Row[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [f, setF] = useState<Row>(() => ({
-    title: '', type: 0, status: 0, content: '', place: '', note: '', until: '',
+    title: '', type: 0, status: 0, content: '', place: '', note: '', color: '', until: '',
     day: prefill?.date ?? ymd(new Date()), deadline: false,
     start: prefill?.start ?? '09:00', end: prefill?.end && prefill.end !== '23:59' ? prefill.end : '10:00',
   }))
@@ -274,7 +275,7 @@ function TaskForm({ id, prefill, onClose }: { id?: number; prefill?: Row; onClos
     setConflicts(null)
     const data: Row = {
       title: f.title.trim(), type: Number(f.type), status: Number(f.status), content: f.content ?? '', place: f.place ?? '',
-      note: f.note ?? '', day: f.day, until: f.until || null, start: f.start, deadline: !!f.deadline, force,
+      note: f.note ?? '', color: f.color ?? '', day: f.day, until: f.until || null, start: f.start, deadline: !!f.deadline, force,
     }
     if (!f.deadline) data.end = f.end
     if (id) data.id = id
@@ -330,6 +331,7 @@ function TaskForm({ id, prefill, onClose }: { id?: number; prefill?: Row; onClos
         <Field label="Địa điểm"><Input value={f.place} onChange={(e) => set('place', e.target.value)} /></Field>
         <Field label="Nội dung" wide><Input value={f.content} onChange={(e) => set('content', e.target.value)} /></Field>
         <Field label="Ghi chú" wide><Input value={f.note} onChange={(e) => set('note', e.target.value)} /></Field>
+        <Field label="Màu trên lịch" wide><ColorPicker value={f.color ?? ''} onChange={(c) => set('color', c)} noneLabel="Mặc định (xám)" /></Field>
       </div>
       {conflicts && <div className="mt-3"><ConflictList items={conflicts} onForce={() => void save(true)} /></div>}
       <div className="mt-4 flex justify-between">
@@ -450,13 +452,10 @@ function OccurrenceDialog({ sourceId, origDate, date, kind, onClose }: {
 // ---------- gắn một lần trong App.tsx ----------
 
 export function ScheduleDialogHost() {
-  const { hasRole } = useSession()
   const [req, setReq] = useState<EditorRequest | null>(null)
   useEffect(() => onEditorRequest(setReq), [])
   if (!req) return null
   const close = () => setReq(null)
-  // Sinh viên không có lịch dạy: kéo vùng trống trên lịch thì tạo công việc
-  if (req.mode === 'series' && !req.id && !hasRole('teacher')) return <TaskForm key="task-new" prefill={req.prefill} onClose={close} />
   if (req.mode === 'series') return <SeriesForm key={`series-${req.id ?? 'new'}`} id={req.id} prefill={req.prefill} onClose={close} />
   if (req.mode === 'task') return <TaskForm key={`task-${req.id ?? 'new'}`} id={req.id} prefill={req.prefill} onClose={close} />
   return (

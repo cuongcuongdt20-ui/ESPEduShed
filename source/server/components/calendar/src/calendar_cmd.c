@@ -1,6 +1,7 @@
 // Lệnh TCP lịch tuần, khoảng ngày, xung đột (TV4). Đặc tả: docs/protocol.md mục 5.
 // Mọi dữ liệu lấy theo ctx->user_id của phiên, không tin user_id trong data. Phản hồi luôn dưới 8 KB:
-// mỗi buổi khoảng 200 byte JSON nên calendar.* chỉ trả tối đa ITEM_BUDGET byte buổi, quá thì "truncated": true.
+// mỗi buổi khoảng 200 byte JSON nên calendar.* chỉ trả tối đa CALENDAR_TCP_ITEM_BUDGET byte buổi, quá thì
+// "truncated": true.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,7 +13,6 @@
 #include "dt.h"
 
 #define MAX_OCC      120     // số buổi tối đa đọc từ sched_expand mỗi lần
-#define ITEM_BUDGET  5800    // byte JSON tối đa cho mảng items của calendar.*
 #define CONF_MAX     16      // số xung đột tối đa trong calendar.*
 #define LIST_MAX     20      // số xung đột tối đa trong conflict.list
 #define CHECK_MAX    8       // số xung đột tối đa trong conflict.check
@@ -28,6 +28,7 @@ static cJSON *occ_json(const occurrence_t *o, const int *cf_idx, int n_cf, int *
     sched_label(o->source_id, o->kind, title, room, cls);
     if (o->kind != OCC_TASK) sched_room_override(o->source_id, o->orig_day, room);   // buổi đổi phòng
     catalog_school_label(o->school_id, sn, color);
+    sched_color(o->source_id, o->kind, color);           // màu riêng của lịch / công việc (nếu có) đè màu trường
 
     cJSON *j = cJSON_CreateObject();
     cJSON_AddNumberToObject(j, "sourceId", o->source_id);
@@ -75,7 +76,7 @@ static bool is_side(const occurrence_t *o, const conflict_t *c)
            (o->source_id == c->b.source_id && o->start_min == c->b.start_min && o->day == c->b.day);
 }
 
-static int reply_range(const ld_ctx_t *ctx, int32_t from, int32_t to, cJSON *out)
+int calendar_range_json(uint16_t user_id, int32_t from, int32_t to, int item_budget, cJSON *out)
 {
     occurrence_t *occ = malloc(sizeof(occurrence_t) * MAX_OCC);
     conflict_t *cf = malloc(sizeof(conflict_t) * (CONF_MAX + 1));      // +1: biết còn xung đột bị bỏ hay không
@@ -84,7 +85,7 @@ static int reply_range(const ld_ctx_t *ctx, int32_t from, int32_t to, cJSON *out
         free(cf);
         return ld_fail(out, LD_ERR_INTERNAL, "Het bo nho", NULL);
     }
-    int n = sched_expand(ctx->user_id, from, to, occ, MAX_OCC);
+    int n = sched_expand(user_id, from, to, occ, MAX_OCC);
     if (n < 0) {
         free(occ);
         free(cf);
@@ -106,7 +107,7 @@ static int reply_range(const ld_ctx_t *ctx, int32_t from, int32_t to, cJSON *out
                 idx[m++] = c;
         int est;
         cJSON *j = occ_json(&occ[k], idx, m, &est);
-        if (est_total + est > ITEM_BUDGET) {
+        if (est_total + est > item_budget) {
             cJSON_Delete(j);
             truncated = true;
             break;
@@ -126,6 +127,11 @@ static int reply_range(const ld_ctx_t *ctx, int32_t from, int32_t to, cJSON *out
     free(occ);
     free(cf);
     return LD_OK;
+}
+
+static int reply_range(const ld_ctx_t *ctx, int32_t from, int32_t to, cJSON *out)
+{
+    return calendar_range_json(ctx->user_id, from, to, CALENDAR_TCP_ITEM_BUDGET, out);
 }
 
 // calendar.week {date?} → {from, to, items, conflicts}. Không có date thì dùng hôm nay của ESP.
@@ -352,9 +358,9 @@ static int conflict_ack(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
 
 void calendar_register_cmds(void)
 {
-    ld_register_cmd("calendar.week", calendar_week, LD_ROLE_STUDENT);
-    ld_register_cmd("calendar.range", calendar_range, LD_ROLE_STUDENT);
-    ld_register_cmd("conflict.list", conflict_list, LD_ROLE_STUDENT);
-    ld_register_cmd("conflict.check", conflict_check_cmd, LD_ROLE_STUDENT);
-    ld_register_cmd("conflict.ack", conflict_ack, LD_ROLE_STUDENT);
+    ld_register_cmd("calendar.week", calendar_week, LD_ROLE_USER);
+    ld_register_cmd("calendar.range", calendar_range, LD_ROLE_USER);
+    ld_register_cmd("conflict.list", conflict_list, LD_ROLE_USER);
+    ld_register_cmd("conflict.check", conflict_check_cmd, LD_ROLE_USER);
+    ld_register_cmd("conflict.ack", conflict_ack, LD_ROLE_USER);
 }
