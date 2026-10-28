@@ -6,7 +6,7 @@ import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'el
 import * as auth from './auth'
 import { discover } from './discovery'
 import { ApiError, TcpClient } from './tcp-client'
-import type { IpcResult, Role } from './shared'
+import type { IpcResult } from './shared'
 import { startAutoUpdate } from './updater'
 
 const client = new TcpClient()
@@ -47,9 +47,9 @@ function registerIpc(): void {
     await client.connect(host, port as number)
     await auth.restoreSession(client)
   })
-  handle('api:login', (user: unknown, password: unknown) => {
-    if (typeof user !== 'string' || typeof password !== 'string') throw badArg('Thiếu tài khoản hoặc mật khẩu', 'user')
-    return auth.login(client, user, password)
+  handle('api:login', (password: unknown) => {
+    if (typeof password !== 'string') throw badArg('Thiếu mật khẩu', 'password')
+    return auth.login(client, password)
   })
   handle('api:logout', () => auth.logout(client))
   handle('api:request', async (cmd: unknown, data: unknown) => {
@@ -66,14 +66,9 @@ function registerIpc(): void {
     user: auth.currentUser,
     mustChangePassword: auth.mustChangePassword,
   }))
-  handle('api:changePassword', (password: unknown, user: unknown) => {
+  handle('api:changePassword', (password: unknown) => {
     if (typeof password !== 'string') throw badArg('Thiếu mật khẩu mới', 'password')
-    return auth.changePassword(client, password, typeof user === 'string' && user ? user : undefined)
-  })
-  handle('api:createUser', (user: unknown, role: unknown, password: unknown) => {
-    if (typeof user !== 'string' || typeof password !== 'string') throw badArg('Thiếu tài khoản hoặc mật khẩu', 'user')
-    if (role !== 'admin' && role !== 'teacher' && role !== 'student') throw badArg('Vai trò không hợp lệ', 'role')
-    return auth.createUser(client, user, role as Role, password)
+    return auth.changePassword(client, password)
   })
   // In / xuất PDF trang đang xem (TV4 dùng cho thời khoá biểu tuần)
   handle('api:printToPdf', async (defaultName: unknown) => {

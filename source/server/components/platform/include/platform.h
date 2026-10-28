@@ -13,11 +13,10 @@
 extern "C" {
 #endif
 
-// ---------- vai trò: số càng lớn quyền càng cao, min_role so sánh bằng >=
-#define LD_ROLE_NONE    0      // chưa đăng nhập; min_role = LD_ROLE_NONE nghĩa là lệnh công khai
-#define LD_ROLE_STUDENT 1
-#define LD_ROLE_TEACHER 2
-#define LD_ROLE_ADMIN   3
+// ---------- quyền: hệ thống chỉ có một tài khoản, nên lệnh chỉ chia công khai và cần đăng nhập
+#define LD_ROLE_NONE 0         // chưa đăng nhập; min_role = LD_ROLE_NONE nghĩa là lệnh công khai
+#define LD_ROLE_USER 1         // đã đăng nhập
+#define LD_OWNER_ID  1         // id của tài khoản duy nhất, là chủ mọi lịch và công việc
 
 // ---------- mã lỗi của giao thức (README, mục A3)
 typedef enum {
@@ -38,8 +37,7 @@ const char *ld_err_name(int code);   // LD_ERR_CONFLICT → "CONFLICT"
 
 // ---------- ngữ cảnh của một yêu cầu
 typedef struct {
-    uint16_t    user_id;   // 0 nếu chưa đăng nhập
-    uint8_t     role;      // LD_ROLE_*
+    uint16_t    user_id;   // 0 nếu chưa đăng nhập, LD_OWNER_ID nếu đã đăng nhập
     int         client;    // chỉ số kết nối trong server (0..LD_MAX_CLIENTS-1)
     uint32_t    ip;        // IPv4 của client (thứ tự byte mạng)
     const char *token;     // token đã xác thực, NULL nếu không có
@@ -49,7 +47,8 @@ typedef struct {
 // trường vào đây. Trả LD_OK, hoặc giá trị trả về của ld_fail() khi lỗi.
 typedef int (*ld_cmd_fn)(const ld_ctx_t *ctx, const cJSON *data, cJSON *out);
 
-// Đăng ký lệnh, ví dụ ld_register_cmd("school.list", school_list, LD_ROLE_STUDENT). Gọi trước platform_start().
+// Đăng ký lệnh, ví dụ ld_register_cmd("school.list", school_list, LD_ROLE_USER). Gọi trước platform_start().
+// min_role chỉ nhận LD_ROLE_NONE hoặc LD_ROLE_USER; giá trị khác bị từ chối (lỗi lập trình, dừng khi khởi động).
 void ld_register_cmd(const char *name, ld_cmd_fn fn, uint8_t min_role);
 
 // Báo lỗi trong handler: return ld_fail(out, LD_ERR_BAD_ARG, "Thiếu tên trường", "name");
@@ -58,7 +57,7 @@ int ld_fail(cJSON *out, int code, const char *message, const char *field);
 
 // Tin đẩy {"push":"changed","entity":..,"id":..}. An toàn khi gọi từ handler hoặc từ task khác.
 void ld_push_changed(const char *entity, uint32_t id);                    // mọi client đã đăng nhập
-void ld_push_changed_user(uint16_t user_id, const char *entity, uint32_t id);   // chỉ các phiên của một người
+void ld_push_changed_user(uint16_t user_id, const char *entity, uint32_t id);   // chỉ các phiên của một tài khoản
 
 // ---------- phân trang cho lệnh trả danh sách (phản hồi phải dưới 8 KB)
 // Lệnh nhận {offset?}; thêm từng mục bằng ld_page_add, khi hết ngân sách thì dừng và ghi "next": chỉ số mục tiếp theo.
@@ -92,6 +91,10 @@ void            store_close_lines(store_reader_t *r);
 // fn chạy trên task ghi riêng (stack 8 KB), không chạy trong handler hay callback esp_timer. Gọi được từ mọi task.
 typedef void (*store_save_fn)(void);
 void      store_save_later(store_save_fn fn);
+
+// ---------- số ngẫu nhiên phần cứng, mã hex
+void ld_random(void *buf, size_t len);
+void ld_hex_encode(const uint8_t *in, size_t len, char *out);   // out cần 2*len+1 byte
 
 // ---------- thời gian (UTC+7)
 bool    time_is_synced(void);

@@ -116,6 +116,12 @@ void tcp_client_set_user(int i, uint16_t user_id)
     if (i >= 0 && i < LD_MAX_CLIENTS && s_clients[i].sock >= 0) s_clients[i].user_id = user_id;
 }
 
+void tcp_clients_logout_user(uint16_t user_id)
+{
+    for (int i = 0; i < LD_MAX_CLIENTS; i++)
+        if (s_clients[i].sock >= 0 && s_clients[i].user_id == user_id) s_clients[i].user_id = 0;
+}
+
 ld_challenge_t *tcp_client_challenge(int i)
 {
     if (i < 0 || i >= LD_MAX_CLIENTS || s_clients[i].sock < 0) return NULL;

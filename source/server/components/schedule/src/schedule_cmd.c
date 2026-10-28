@@ -6,6 +6,7 @@
 // Không giữ g_sched_lock khi gọi conflict_check / catalog_* (các hàm đó tự khoá).
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <limits.h>
 #include "cJSON.h"
 #include "platform.h"
@@ -45,6 +46,24 @@ static bool opt_int(const cJSON *data, const char *key, int lo, int hi, int *dst
     const cJSON *it = cJSON_GetObjectItemCaseSensitive(data, key);
     if (!it || cJSON_IsNull(it)) return true;
     return get_range(data, key, lo, hi, dst);
+}
+
+// Màu tuỳ chọn: không gửi (hoặc null) thì giữ dst; "" là bỏ màu riêng; còn lại phải là "#RRGGBB"
+static bool opt_color(const cJSON *data, char dst[8])
+{
+    const cJSON *it = cJSON_GetObjectItemCaseSensitive(data, "color");
+    if (!it || cJSON_IsNull(it)) return true;
+    if (!cJSON_IsString(it)) return false;
+    const char *c = it->valuestring;
+    if (!c[0]) {
+        dst[0] = 0;
+        return true;
+    }
+    if (strlen(c) != 7 || c[0] != '#') return false;
+    for (int i = 1; i < 7; i++)
+        if (!isxdigit((unsigned char) c[i])) return false;
+    for (int i = 0; i < 8; i++) dst[i] = (char) toupper((unsigned char) c[i]);
+    return true;
 }
 
 static bool get_force(const cJSON *data)
@@ -204,6 +223,7 @@ static cJSON *series_json(const sched_series_t *s)
     cJSON_AddStringToObject(o, "date_to", dto);
     cJSON_AddBoolToObject(o, "weekly", s->weekly);
     cJSON_AddStringToObject(o, "note", s->note);
+    cJSON_AddStringToObject(o, "color", s->color);
     return o;
 }
 
@@ -270,6 +290,7 @@ static int read_series(const cJSON *data, cJSON *out, sched_series_t *s)
         return ld_fail(out, LD_ERR_BAD_ARG, "Phong toi da 16 ky tu", "room");
     if (!take_str(ld_get_str(data, "note"), s->note, sizeof(s->note), false))
         return ld_fail(out, LD_ERR_BAD_ARG, "Ghi chu toi da 120 ky tu", "note");
+    if (!opt_color(data, s->color)) return ld_fail(out, LD_ERR_BAD_ARG, "Mau dang #RRGGBB hoac rong", "color");
     // Trường số tuỳ chọn: không gửi thì giữ giá trị đang có trong *s (bản ghi cũ khi sửa, 0 khi tạo mới)
     v = s->class_id;
     if (!opt_int(data, "class_id", 0, UINT16_MAX, &v)) return ld_fail(out, LD_ERR_BAD_ARG, "class_id 0..65535", "class_id");
@@ -554,7 +575,7 @@ static int exception_delete(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
 
 // ---------- Công việc ----------
 
-// task.list → {tasks:[{id, type, title, content, day, until, start, end, deadline, campus_id, place, status, note}]}
+// task.list → {tasks:[{id, type, title, content, day, until, start, end, deadline, campus_id, place, status, note, color}]}
 static int task_list(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
 {
     cJSON *arr = cJSON_AddArrayToObject(out, "tasks");
@@ -586,6 +607,7 @@ static int task_list(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
         cJSON_AddStringToObject(o, "place", t->place);
         cJSON_AddNumberToObject(o, "status", t->status);
         cJSON_AddStringToObject(o, "note", t->note);
+        cJSON_AddStringToObject(o, "color", t->color);
         if (!ld_page_add(arr, o, &budget)) {
             cJSON_AddNumberToObject(out, "next", i);
             break;
@@ -607,6 +629,7 @@ static int read_task(const cJSON *data, cJSON *out, sched_task_t *t)
         return ld_fail(out, LD_ERR_BAD_ARG, "Dia diem toi da 64 ky tu", "place");
     if (!take_str(ld_get_str(data, "note"), t->note, sizeof(t->note), false))
         return ld_fail(out, LD_ERR_BAD_ARG, "Ghi chu toi da 120 ky tu", "note");
+    if (!opt_color(data, t->color)) return ld_fail(out, LD_ERR_BAD_ARG, "Mau dang #RRGGBB hoac rong", "color");
     // Trường số tuỳ chọn: không gửi thì giữ giá trị đang có trong *t (bản ghi cũ khi sửa, 0 khi tạo mới)
     v = t->type;
     if (!opt_int(data, "type", 0, UINT8_MAX, &v)) return ld_fail(out, LD_ERR_BAD_ARG, "type 0..255", "type");
@@ -643,7 +666,8 @@ static int find_task(uint32_t id, uint16_t owner)
     return -1;
 }
 
-// task.create {title, day, start, end | deadline, until?, type?, content?, place?, campus_id?, status?, note?, force?} → {id}
+// task.create {title, day, start, end | deadline, until?, type?, content?, place?, campus_id?, status?, note?, color?,
+// force?} → {id}
 // task.update thêm id
 static int task_save(const ld_ctx_t *ctx, const cJSON *data, cJSON *out, bool update)
 {
@@ -719,16 +743,16 @@ static int task_delete(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
 
 void schedule_register_cmds(void)
 {
-    ld_register_cmd("occurrence.range", occurrence_range, LD_ROLE_STUDENT);
-    ld_register_cmd("schedule.list", schedule_list, LD_ROLE_STUDENT);
-    ld_register_cmd("schedule.get", schedule_get, LD_ROLE_STUDENT);
-    ld_register_cmd("schedule.create", schedule_create, LD_ROLE_TEACHER);   // sinh viên không tạo lịch dạy
-    ld_register_cmd("schedule.update", schedule_update, LD_ROLE_TEACHER);
-    ld_register_cmd("schedule.delete", schedule_delete, LD_ROLE_TEACHER);
-    ld_register_cmd("exception.set", exception_set, LD_ROLE_TEACHER);
-    ld_register_cmd("exception.delete", exception_delete, LD_ROLE_TEACHER);
-    ld_register_cmd("task.list", task_list, LD_ROLE_STUDENT);
-    ld_register_cmd("task.create", task_create, LD_ROLE_STUDENT);
-    ld_register_cmd("task.update", task_update, LD_ROLE_STUDENT);
-    ld_register_cmd("task.delete", task_delete, LD_ROLE_STUDENT);
+    ld_register_cmd("occurrence.range", occurrence_range, LD_ROLE_USER);
+    ld_register_cmd("schedule.list", schedule_list, LD_ROLE_USER);
+    ld_register_cmd("schedule.get", schedule_get, LD_ROLE_USER);
+    ld_register_cmd("schedule.create", schedule_create, LD_ROLE_USER);
+    ld_register_cmd("schedule.update", schedule_update, LD_ROLE_USER);
+    ld_register_cmd("schedule.delete", schedule_delete, LD_ROLE_USER);
+    ld_register_cmd("exception.set", exception_set, LD_ROLE_USER);
+    ld_register_cmd("exception.delete", exception_delete, LD_ROLE_USER);
+    ld_register_cmd("task.list", task_list, LD_ROLE_USER);
+    ld_register_cmd("task.create", task_create, LD_ROLE_USER);
+    ld_register_cmd("task.update", task_update, LD_ROLE_USER);
+    ld_register_cmd("task.delete", task_delete, LD_ROLE_USER);
 }

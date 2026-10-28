@@ -1,6 +1,5 @@
 // Kiểu route mà mỗi module khai báo trong <module>/routes.tsx (TV1). Thêm trang mới không cần sửa App.tsx.
 import type { ComponentType, ReactElement } from 'react'
-import type { Role } from '../../electron/shared'
 
 export interface ModuleRoute {
   path: string                           // ví dụ "/schools", "/schools/:id/periods"
@@ -8,6 +7,5 @@ export interface ModuleRoute {
   element: ReactElement
   icon?: ComponentType<{ className?: string }>
   menu?: boolean                         // hiện trên thanh bên
-  minRole?: Role                         // ẩn và chặn với vai trò thấp hơn
   order?: number                         // thứ tự trên thanh bên (nhỏ đứng trước)
 }

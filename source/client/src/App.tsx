@@ -30,11 +30,9 @@ function Shell() {
   return (
     <AppLayout routes={allRoutes}>
       <Routes>
-        {allRoutes
-          .filter((r) => !r.minRole || s.hasRole(r.minRole))
-          .map((r) => (
-            <Route key={r.path} path={r.path} element={r.element} />
-          ))}
+        {allRoutes.map((r) => (
+          <Route key={r.path} path={r.path} element={r.element} />
+        ))}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
       <ScheduleDialogHost />

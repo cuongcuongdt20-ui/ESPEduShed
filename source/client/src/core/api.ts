@@ -29,15 +29,14 @@ const raw = () => window.espRaw
 
 export const api: EspApi = {
   connect: (host, port) => unwrap(raw().connect(host, port)),
-  login: (user, password) => unwrap(raw().login(user, password)),
+  login: (password) => unwrap(raw().login(password)),
   logout: () => unwrap(raw().logout()),
   request: (cmd, data) => unwrap(raw().request(cmd, data)),
   onPush: (cb) => raw().onPush(cb),
   onConnection: (cb) => raw().onConnection(cb),
   discover: (timeoutMs) => unwrap(raw().discover(timeoutMs)),
   session: () => unwrap(raw().session()),
-  changePassword: (password, user) => unwrap(raw().changePassword(password, user)),
-  createUser: (user, role, password) => unwrap(raw().createUser(user, role, password)),
+  changePassword: (password) => unwrap(raw().changePassword(password)),
   printToPdf: (name) => unwrap(raw().printToPdf(name)),
 }
 

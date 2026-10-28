@@ -1,0 +1,6 @@
+menu "ESPEduShed - Web xem lich"
+    config LD_HTTP_PORT
+        int "Cong HTTP cua trang web xem lich"
+        range 1 65535
+        default 8080
+endmenu

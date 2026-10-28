@@ -172,11 +172,11 @@ bool wifi_rssi(int8_t *rssi)
     return true;
 }
 
-// system.wifi {ssid, pass}: không cần đăng nhập ở chế độ AP (máy mới cài đặt), ở chế độ STA chỉ admin
+// system.wifi {ssid, pass}: không cần đăng nhập ở chế độ AP (máy mới cài đặt), ở chế độ STA phải đăng nhập
 static int cmd_wifi(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
 {
-    if (!s_ap && ctx->role < LD_ROLE_ADMIN)
-        return ld_fail(out, LD_ERR_FORBIDDEN, "Chi admin doi Wi-Fi khi khong o che do AP", NULL);
+    if (!s_ap && ctx->user_id == 0)
+        return ld_fail(out, LD_ERR_UNAUTHORIZED, "Phai dang nhap de doi Wi-Fi khi khong o che do AP", NULL);
     const char *ssid = ld_get_str(data, "ssid");
     const char *pass = ld_get_str(data, "pass");
     if (!ssid || strlen(ssid) == 0 || strlen(ssid) > 32) return ld_fail(out, LD_ERR_BAD_ARG, "ssid 1..32 ky tu", "ssid");

@@ -27,6 +27,7 @@ void platform_init(void)
     auth_register_cmds();
     system_register_cmds();
     wifi_register_cmds();
+    ddns_init();
 }
 
 void platform_start(void)

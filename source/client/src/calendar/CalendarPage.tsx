@@ -9,7 +9,6 @@ import type { DatesSetArg, EventContentArg, EventDropArg, EventInput, EventSourc
 import type { DateSelectArg, EventClickArg } from '@fullcalendar/core'
 import { AlertTriangle, Printer } from 'lucide-react'
 import { api, errorText, usePush } from '../core/api'
-import { useSession } from '../core/session'
 import { useToast } from '../core/components/toast'
 import { useConfirm } from '../core/components/confirm'
 import { Button } from '../core/components/ui/button'
@@ -72,8 +71,6 @@ function EventBlock({ arg }: { arg: EventContentArg }) {
 export function CalendarPage() {
   const toast = useToast()
   const confirm = useConfirm()
-  const { hasRole } = useSession()
-  const canEdit = hasRole('teacher')
   const calRef = useRef<FullCalendar>(null)
   const [range, setRange] = useState<{ from: string; to: string } | null>(null)
   const [slot, setSlot] = useState({ min: 6, max: 22 })
@@ -121,7 +118,7 @@ export function CalendarPage() {
           if (it.kind === KIND_MAKEUP) classes.push('ev-makeup')
           if (it.kind === KIND_TASK) classes.push('ev-task')
           if (isCancelled(it)) classes.push('ev-cancel')
-          const movable = canEdit && it.kind !== KIND_TASK && !isCancelled(it)
+          const movable = it.kind !== KIND_TASK && !isCancelled(it)
           return {
             id: `${it.sourceId}:${it.origDate}:${it.start}`,
             title: it.title,
@@ -140,7 +137,7 @@ export function CalendarPage() {
       toast.error(errorText(e))
       return []
     }
-  }, [canEdit, toast])
+  }, [toast])
 
   function onDates(arg: DatesSetArg) {
     setRange({ from: ymd(arg.start), to: ymd(addDays(arg.end, -1)) })
@@ -277,7 +274,7 @@ export function CalendarPage() {
             events={loadEvents}
             eventContent={(arg) => <EventBlock arg={arg} />}
             eventClick={onClick}
-            selectable={canEdit}
+            selectable
             select={onSelect}
             eventDrop={onDrop}
             datesSet={onDates}

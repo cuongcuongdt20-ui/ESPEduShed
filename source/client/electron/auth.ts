@@ -7,7 +7,7 @@ import path from 'node:path'
 import { app, safeStorage } from 'electron'
 import { deriveKey, makeProof, newSecret } from './crypto'
 import { ApiError, TcpClient } from './tcp-client'
-import type { LoginResult, Role, User } from './shared'
+import type { LoginResult, User } from './shared'
 
 interface Cached {
   user: string
@@ -59,8 +59,11 @@ async function loginWithKey(client: TcpClient, user: string, keyFor: (salt: stri
   return { user: res.user, mustChangePassword: res.mustChangePassword }
 }
 
-export function login(client: TcpClient, user: string, password: string): Promise<LoginResult> {
-  return loginWithKey(client, user, (salt, iter) => deriveKey(password, salt, iter))
+// Server chỉ có một tài khoản, tên cố định
+export const USER_NAME = 'admin'
+
+export function login(client: TcpClient, password: string): Promise<LoginResult> {
+  return loginWithKey(client, USER_NAME, (salt, iter) => deriveKey(password, salt, iter))
 }
 
 // Sau khi nối lại: phiên trên ESP có thể đã mất (ESP khởi động lại). Dùng key trong RAM để đăng nhập lại.
@@ -89,20 +92,10 @@ export async function logout(client: TcpClient): Promise<void> {
   clearToken()
 }
 
-// Đổi mật khẩu của mình (user bỏ trống), hoặc admin đặt lại mật khẩu người khác
-export async function changePassword(client: TcpClient, newPassword: string, user?: string): Promise<void> {
+// Đổi mật khẩu. Server huỷ mọi phiên sau khi đổi: đăng nhập lại bằng mật khẩu mới
+export async function changePassword(client: TcpClient, newPassword: string): Promise<void> {
   if (newPassword.length < 8) throw new ApiError({ code: 'BAD_ARG', message: 'Mật khẩu tối thiểu 8 ký tự', field: 'password' })
-  const secret = await newSecret(newPassword)
-  await client.request('auth.password', user ? { ...secret, user } : secret)
-  if (!user || user === currentUser?.name) {
-    // Server huỷ mọi phiên của mình sau khi đổi mật khẩu: đăng nhập lại bằng mật khẩu mới
-    client.token = null
-    await login(client, currentUser!.name, newPassword)
-  }
-}
-
-export async function createUser(client: TcpClient, user: string, role: Role, password: string): Promise<{ id: number }> {
-  if (password.length < 8) throw new ApiError({ code: 'BAD_ARG', message: 'Mật khẩu tối thiểu 8 ký tự', field: 'password' })
-  const secret = await newSecret(password)
-  return client.request('auth.register', { user, role, ...secret })
+  await client.request('auth.password', await newSecret(newPassword))
+  client.token = null
+  await login(client, newPassword)
 }

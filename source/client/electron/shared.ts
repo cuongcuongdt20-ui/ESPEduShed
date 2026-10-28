@@ -1,12 +1,9 @@
 // Kiểu dữ liệu dùng chung giữa main process và giao diện (TV1). Chỉ chứa type, không có mã chạy.
 
 export type ConnState = 'connecting' | 'online' | 'offline'
-export type Role = 'admin' | 'teacher' | 'student'
-
 export interface User {
   id: number
   name: string
-  role: Role
 }
 
 export interface LoginResult {
@@ -48,15 +45,14 @@ export interface PushMessage {
 // Hợp đồng window.api giữa TV1 và các thành viên khác (README mục B1)
 export interface EspApi {
   connect(host: string, port: number): Promise<void>
-  login(user: string, password: string): Promise<LoginResult>
+  login(password: string): Promise<LoginResult>
   logout(): Promise<void>
   request<T = any>(cmd: string, data?: object): Promise<T>
   onPush(cb: (msg: PushMessage) => void): () => void
   onConnection(cb: (state: ConnState) => void): () => void
   discover(timeoutMs?: number): Promise<ServerInfo[]>
-  // Thêm của TV1 cho trang tài khoản và in ấn
+  // Thêm của TV1 cho đổi mật khẩu và in ấn
   session(): Promise<SessionInfo>
-  changePassword(newPassword: string, user?: string): Promise<void>
-  createUser(user: string, role: Role, password: string): Promise<{ id: number }>
+  changePassword(newPassword: string): Promise<void>
   printToPdf(defaultName: string): Promise<string | null>
 }

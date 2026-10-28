@@ -5,13 +5,12 @@ declare global {
   interface Window {
     espRaw: {
       connect(host: string, port: number): Promise<IpcResult<void>>
-      login(user: string, password: string): Promise<IpcResult<LoginResult>>
+      login(password: string): Promise<IpcResult<LoginResult>>
       logout(): Promise<IpcResult<void>>
       request(cmd: string, data?: object): Promise<IpcResult<any>>
       discover(timeoutMs?: number): Promise<IpcResult<ServerInfo[]>>
       session(): Promise<IpcResult<SessionInfo>>
-      changePassword(password: string, user?: string): Promise<IpcResult<void>>
-      createUser(user: string, role: string, password: string): Promise<IpcResult<{ id: number }>>
+      changePassword(password: string): Promise<IpcResult<void>>
       printToPdf(defaultName: string): Promise<IpcResult<string | null>>
       onPush(cb: (msg: PushMessage) => void): () => void
       onConnection(cb: (state: ConnState) => void): () => void

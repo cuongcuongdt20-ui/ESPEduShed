@@ -5,7 +5,9 @@ CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
 # Socket: 8 client TCP + socket nghe + UDP discovery + mDNS + SNTP
-CONFIG_LWIP_MAX_SOCKETS=16
+# Socket cần dùng: 8 client TCP + 1 nghe TCP + UDP discovery + mDNS + httpd (1 nghe + 1 điều khiển + 4 phiên)
+# + 1 HTTPS tới DuckDNS + SNTP = 19, chừa dư cho kết nối đang đóng. httpd tự giới hạn max_open_sockets = 4.
+CONFIG_LWIP_MAX_SOCKETS=24
 
 # Task chính khởi tạo cả các module: cần stack lớn hơn mặc định
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192

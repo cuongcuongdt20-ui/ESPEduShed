@@ -1,6 +1,6 @@
 // Client TCP (TV1), chạy ở main process bằng module net của Node.js.
 //  - một kết nối lâu dài tới ESP32, ghép khung bằng FrameDecoder
-//  - mỗi yêu cầu có id tăng dần; phản hồi được ghép lại theo id, hết hạn sau 5 giây
+//  - mỗi yêu cầu có id tăng dần; phản hồi được ghép lại theo id, hết hạn sau 10 giây
 //  - tin đẩy (không có id) phát qua sự kiện 'push'
 //  - gửi system.ping mỗi 15 giây (server đóng kết nối im lặng quá 60 giây)
 //  - mất kết nối thì tự nối lại sau 2 giây, phát sự kiện 'reconnected'
@@ -9,7 +9,7 @@ import { EventEmitter } from 'node:events'
 import { FrameDecoder, encodeFrame } from './frame'
 import type { ApiErrorData, ConnState } from './shared'
 
-const REQUEST_TIMEOUT_MS = 5000
+const REQUEST_TIMEOUT_MS = 10000      // đủ cho mạng di động chậm khi vào từ ngoài qua DDNS
 const PING_INTERVAL_MS = 15000
 const RECONNECT_DELAY_MS = 2000
 

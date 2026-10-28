@@ -26,6 +26,7 @@ typedef struct {
 void            tcp_server_start(void);
 bool            tcp_client_send(int client, const char *json);   // xếp một khung vào hàng đợi gửi
 void            tcp_client_set_user(int client, uint16_t user_id); // phiên đã đăng nhập: nhận tin đẩy
+void            tcp_clients_logout_user(uint16_t user_id);         // mọi kết nối của tài khoản thôi nhận tin đẩy
 ld_challenge_t *tcp_client_challenge(int client);
 int             tcp_client_count(void);
 
@@ -34,16 +35,15 @@ void protocol_handle(int client, uint32_t ip, char *payload, uint32_t len);
 void protocol_stats(uint32_t *requests, uint32_t *errors, uint32_t *max_us);
 
 // ---------- crypto.c
-void ld_random(void *buf, size_t len);
-void ld_hex_encode(const uint8_t *in, size_t len, char *out);          // out cần 2*len+1 byte
+// ld_random, ld_hex_encode khai báo trong platform.h (module khác cũng dùng)
 bool ld_hex_decode(const char *in, uint8_t *out, size_t len);          // in phải dài đúng 2*len ký tự hex
 void ld_hmac_sha256(const uint8_t *key, size_t key_len, const uint8_t *msg, size_t msg_len, uint8_t out[32]);
 void ld_pbkdf2_sha256(const uint8_t *pass, size_t pass_len, const uint8_t *salt, size_t salt_len,
                       uint32_t iterations, uint8_t out[32]);
 bool ld_ct_equal(const uint8_t *a, const uint8_t *b, size_t len);      // so sánh thời gian hằng
 
-// ---------- users.c
-#define LD_MAX_USERS     32
+// ---------- users.c: một tài khoản duy nhất (id LD_OWNER_ID, tên "admin")
+#define LD_USER_NAME     "admin"
 #define LD_NAME_MAX      32
 #define LD_SALT_LEN      16
 #define LD_KEY_LEN       32
@@ -52,23 +52,16 @@ bool ld_ct_equal(const uint8_t *a, const uint8_t *b, size_t len);      // so sá
 typedef struct {
     uint16_t id;
     char     name[LD_NAME_MAX + 1];
-    uint8_t  role;
     uint8_t  salt[LD_SALT_LEN];
     uint8_t  key[LD_KEY_LEN];
     uint32_t iter;
     bool     must_change;
 } ld_user_t;
 
-void        users_init(void);
-bool        users_get(uint16_t id, ld_user_t *out);
-bool        users_find(const char *name, ld_user_t *out);
-int         users_create(const char *name, uint8_t role, const uint8_t *salt, const uint8_t *key, uint32_t iter,
-                         uint16_t *id_out);
-int         users_set_password(uint16_t id, const uint8_t *salt, const uint8_t *key, uint32_t iter, bool must_change);
-int         users_delete(uint16_t id);
-void        users_list_json(cJSON *arr);
-uint8_t     users_role_from_str(const char *s);   // LD_ROLE_NONE nếu sai
-const char *users_role_to_str(uint8_t role);
+void users_init(void);
+bool users_get(uint16_t id, ld_user_t *out);
+bool users_find(const char *name, ld_user_t *out);
+int  users_set_password(uint16_t id, const uint8_t *salt, const uint8_t *key, uint32_t iter, bool must_change);
 
 // ---------- auth.c, wifi.c, system_cmd.c: đăng ký lệnh
 void auth_init(void);
@@ -79,6 +72,8 @@ void wifi_ip_str(char out[16]);
 bool wifi_rssi(int8_t *rssi);
 void wifi_register_cmds(void);
 void system_register_cmds(void);
+void ddns_init(void);                   // đọc cấu hình DuckDNS, chạy task cập nhật, đăng ký system.ddns
+void ddns_status_json(cJSON *out);      // thêm "ddns": {domain, lastOk?, lastAgoS?} cho system.status
 
 // ---------- storage.c, time_svc.c
 esp_err_t storage_init(void);

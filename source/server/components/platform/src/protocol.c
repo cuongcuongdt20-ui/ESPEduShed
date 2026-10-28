@@ -1,6 +1,7 @@
 // Tầng ứng dụng (TV1): phân tích {id, cmd, token, data}, tra bảng lệnh, kiểm tra token và vai trò,
 // gọi handler rồi đóng gói phản hồi {id, ok, data | error}. Chạy trong task tcp_server.
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -38,6 +39,11 @@ const char *ld_err_name(int code)
 
 void ld_register_cmd(const char *name, ld_cmd_fn fn, uint8_t min_role)
 {
+    // Chỉ còn một tài khoản: không có quyền cao hơn "đã đăng nhập"
+    if (min_role > LD_ROLE_USER) {
+        ESP_LOGE(TAG, "lenh %s dang ky voi min_role %u, chi nhan LD_ROLE_NONE hoac LD_ROLE_USER", name, min_role);
+        abort();
+    }
     for (int i = 0; i < s_ncmds; i++) {
         if (strcmp(s_cmds[i].name, name) == 0) {
             ESP_LOGE(TAG, "lenh %s dang ky hai lan", name);
@@ -203,7 +209,6 @@ void protocol_handle(int client, uint32_t ip, char *payload, uint32_t len)
     ld_user_t user = {0};
     if (token && session_lookup(token, ld_now_ms(), &uid) && users_get(uid, &user)) {
         ctx.user_id = uid;
-        ctx.role = user.role;
         ctx.token = token;
         must_change = user.must_change;
         tcp_client_set_user(client, uid);              // phiên đã đăng nhập: nhận tin đẩy, không bị đóng sau 30 giây
@@ -215,10 +220,6 @@ void protocol_handle(int client, uint32_t ip, char *payload, uint32_t len)
         }
         if (must_change && !allowed_before_password_change(name)) {
             reply(client, id, LD_ERR_FORBIDDEN, "Phai doi mat khau truoc", NULL, NULL);
-            goto done;
-        }
-        if (ctx.role < cmd->min_role) {
-            reply(client, id, LD_ERR_FORBIDDEN, "Khong du quyen", NULL, NULL);
             goto done;
         }
     }
