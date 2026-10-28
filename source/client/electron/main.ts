@@ -7,6 +7,7 @@ import * as auth from './auth'
 import { discover } from './discovery'
 import { ApiError, TcpClient } from './tcp-client'
 import type { IpcResult, Role } from './shared'
+import { startAutoUpdate } from './updater'
 
 const client = new TcpClient()
 let win: BrowserWindow | null = null
@@ -129,6 +130,7 @@ app.whenReady().then(() => {
   registerIpc()
   wireClientEvents()
   createWindow()
+  startAutoUpdate(() => win)
 })
 
 app.on('window-all-closed', () => {

@@ -661,6 +661,17 @@ npm run dev            # chạy thử
 npm run dist           # tạo bản cài đặt Windows trong source/client/release
 ```
 
+**Người dùng không cần code:** tải `ESPEduShed-Setup-<phiên bản>.exe` ở mục [Releases](https://github.com/cuongcuongdt20-ui/ESPEduShed/releases/latest) và cài. Mỗi lần mở (và 4 giờ một lần khi đang mở), app hỏi GitHub Releases, có bản mới thì tải ngầm và hỏi khởi động lại để cài.
+
+**Phát hành bản mới (TV1):** tăng `version` trong `source/client/package.json` (ví dụ `1.0.1`), commit, rồi đẩy tag cùng số:
+
+```bash
+git tag client-v1.0.1
+git push origin client-v1.0.1
+```
+
+GitHub Actions ([`release-client.yml`](.github/workflows/release-client.yml)) chạy test, build bản cài và đưa lên Releases kèm `latest.yml`. Bản cài chưa ký số nên Windows SmartScreen sẽ cảnh báo lần cài đầu ("More info" → "Run anyway").
+
 Màn hình đầu tiên: nhập IP của ESP (hoặc bấm tìm trong LAN khi TV2 làm xong UDP discovery) → đăng nhập `admin` → đổi mật khẩu bắt buộc ở lần đầu.
 
 **Chưa có ESP32:** chạy server giả lập rồi cho app nối vào `127.0.0.1:5000`:
