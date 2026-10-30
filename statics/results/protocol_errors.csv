@@ -1,0 +1,10 @@
+case,expected,actual,other_client_ok,passed
+json_hong,BAD_JSON,BAD_JSON,1,1
+lenh_khong_co,UNKNOWN_CMD,UNKNOWN_CMD,1,1
+thieu_truong_cmd,BAD_ARG,BAD_ARG,1,1
+chua_dang_nhap,UNAUTHORIZED,UNAUTHORIZED,1,1
+token_sai,UNAUTHORIZED,UNAUTHORIZED,1,1
+thieu_tham_so,BAD_ARG,BAD_ARG,1,1
+ngay_sai,BAD_ARG,BAD_ARG,1,1
+van_dung_sau_loi,OK,OK,1,1
+do_dai_khung_0,closed,closed,1,1

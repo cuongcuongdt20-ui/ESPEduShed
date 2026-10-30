@@ -1,0 +1,5 @@
+cmd,clients,requests_per_client,ok,errors,min_ms,avg_ms,p50_ms,p95_ms,max_ms,throughput_rps
+system.ping,1,200,200,0,8.21,12.94,9.4,13.52,204.95,75.1
+system.ping,2,200,400,0,6.51,20.54,9.07,14.08,811.0,97.0
+system.ping,4,200,800,0,6.71,16.55,12.46,18.82,652.37,230.8
+system.ping,8,200,1600,0,8.35,22.08,19.37,29.27,147.17,264.0

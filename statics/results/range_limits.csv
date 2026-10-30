@@ -1,0 +1,9 @@
+cmd,days,expected,actual,items,truncated,passed
+calendar.range,1,OK,OK,0,0,1
+occurrence.range,1,OK,OK,0,0,1
+calendar.range,7,OK,OK,2,0,1
+occurrence.range,7,OK,OK,2,0,1
+calendar.range,62,OK,OK,18,0,1
+occurrence.range,62,OK,OK,18,0,1
+calendar.range,63,BAD_ARG,BAD_ARG,,0,1
+occurrence.range,63,BAD_ARG,BAD_ARG,,0,1

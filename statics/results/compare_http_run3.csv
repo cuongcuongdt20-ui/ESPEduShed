@@ -1,0 +1,42 @@
+metric,transport,clients,value,unit
+bytes_request,tcp,1,125,byte
+bytes_response,tcp,1,496,byte
+bytes_request,http,1,138,byte
+bytes_response,http,1,626,byte
+items,tcp,1,2,buoi
+items,http,1,2,buoi
+rtt_avg_ms,tcp,1,53.96,ms
+rtt_p95_ms,tcp,1,204.8,ms
+rtt_max_ms,tcp,1,205.85,ms
+throughput,tcp,1,18.4,yeu cau/giay
+errors,tcp,1,0,lan
+rtt_avg_ms,http_keepalive,1,339.76,ms
+rtt_p95_ms,http_keepalive,1,626.02,ms
+rtt_max_ms,http_keepalive,1,2739.17,ms
+throughput,http_keepalive,1,2.9,yeu cau/giay
+errors,http_keepalive,1,0,lan
+rtt_avg_ms,http_new_conn,1,479.26,ms
+rtt_p95_ms,http_new_conn,1,926.01,ms
+rtt_max_ms,http_new_conn,1,4208.2,ms
+throughput,http_new_conn,1,2.1,yeu cau/giay
+errors,http_new_conn,1,0,lan
+rtt_avg_ms,tcp,4,54.99,ms
+rtt_p95_ms,tcp,4,204.75,ms
+rtt_max_ms,tcp,4,1229.13,ms
+throughput,tcp,4,67.9,yeu cau/giay
+errors,tcp,4,0,lan
+rtt_avg_ms,http_keepalive,4,142.59,ms
+rtt_p95_ms,http_keepalive,4,511.62,ms
+rtt_max_ms,http_keepalive,4,812.09,ms
+throughput,http_keepalive,4,27.9,yeu cau/giay
+errors,http_keepalive,4,0,lan
+rtt_avg_ms,http_new_conn,4,156.01,ms
+rtt_p95_ms,http_new_conn,4,613.05,ms
+rtt_max_ms,http_new_conn,4,2642.82,ms
+throughput,http_new_conn,4,23.7,yeu cau/giay
+errors,http_new_conn,4,0,lan
+ram_per_conn,tcp,3,405,byte
+ram_per_conn,http_keepalive,3,408,byte
+push_delay_avg_ms,tcp,20,143.18,ms
+push_delay_p95_ms,tcp,20,217.57,ms
+poll_delay_avg_ms,http_poll_60s,0,30000,ms (ly thuyet: nua chu ky hoi vong)
