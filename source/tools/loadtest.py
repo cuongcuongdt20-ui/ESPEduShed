@@ -13,11 +13,17 @@ Kịch bản:
             python loadtest.py maxconn --host 192.168.1.37 --count 10
   replay    gửi lại gói auth.login cũ, phải bị từ chối
             python loadtest.py replay --host ... --user admin --password ...
+  http      so giao thức TCP tự thiết kế với HTTP trên CÙNG bo, CÙNG dữ liệu: calendar.range (TCP 5000) và
+            GET /api/<khoá>/range (esp_http_server cổng 8080). Đo byte mỗi yêu cầu, thời gian khứ hồi theo số client,
+            RAM mỗi kết nối (heapFree), độ trễ nhận thay đổi (tin đẩy TCP; web hỏi vòng 60 giây)
+            python loadtest.py http --host 192.168.1.37 --password ... --clients 1,4 --requests 200
+                                    --from 2026-09-07 --to 2026-09-13
 """
 import argparse
 import csv
 import json
 import os
+import socket
 import statistics
 import struct
 import sys
@@ -177,9 +183,250 @@ def run_replay(args):
               [[int(bool(first.get('ok'))), int(bool(second.get('ok'))), int(bool(ok))]])
 
 
+class HttpConn:
+    """HTTP/1.1 tối giản trên socket thô để đếm đúng số byte đi trên dây (header + thân)."""
+
+    def __init__(self, host, port, keep_alive=True, timeout=5.0):
+        self.host, self.port, self.keep_alive, self.timeout = host, port, keep_alive, timeout
+        self.sock = None
+        self.buf = b""
+
+    def _connect(self):
+        self.sock = socket.create_connection((self.host, self.port), timeout=self.timeout)
+        self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self.buf = b""
+
+    def close(self):
+        if self.sock:
+            try:
+                self.sock.close()
+            except OSError:
+                pass
+        self.sock = None
+
+    def get(self, path):
+        """Trả (status, body, byte gửi, byte nhận). Không giữ kết nối thì mở mới cho mỗi yêu cầu."""
+        if self.sock is None:
+            self._connect()
+        req = (f"GET {path} HTTP/1.1\r\nHost: {self.host}:{self.port}\r\n"
+               f"Connection: {'keep-alive' if self.keep_alive else 'close'}\r\n\r\n").encode()
+        self.sock.sendall(req)
+        while b"\r\n\r\n" not in self.buf:
+            chunk = self.sock.recv(4096)
+            if not chunk:
+                raise ConnectionError("server dong ket noi")
+            self.buf += chunk
+        head, rest = self.buf.split(b"\r\n\r\n", 1)
+        lines = head.decode("latin-1").split("\r\n")
+        status = int(lines[0].split()[1])
+        hdr = {k.strip().lower(): v.strip() for k, v in (l.split(":", 1) for l in lines[1:] if ":" in l)}
+        if "content-length" in hdr:
+            n = int(hdr["content-length"])
+            while len(rest) < n:
+                chunk = self.sock.recv(4096)
+                if not chunk:
+                    raise ConnectionError("server dong ket noi giua chung")
+                rest += chunk
+            body, self.buf = rest[:n], rest[n:]
+            raw = n
+        else:                                            # chunked (httpd_resp_send_chunk)
+            body, raw = b"", 0
+            while True:
+                while b"\r\n" not in rest:
+                    rest += self.sock.recv(4096)
+                size_line, rest = rest.split(b"\r\n", 1)
+                size = int(size_line.split(b";")[0], 16)
+                while len(rest) < size + 2:
+                    rest += self.sock.recv(4096)
+                body += rest[:size]
+                raw += len(size_line) + 2 + size + 2
+                rest = rest[size + 2:]
+                if size == 0:
+                    break
+            self.buf = rest
+        received = len(head) + 4 + raw
+        if not self.keep_alive or hdr.get("connection", "").lower() == "close":
+            self.close()
+        return status, body, len(req), received
+
+
+def tcp_frame_sizes(msg_obj, reply_obj):
+    return len(encode_frame(msg_obj)), 4 + len(json.dumps(reply_obj, ensure_ascii=False, separators=(",", ":")).encode())
+
+
+def heap_free(args):
+    c = Client(args.host, args.port)
+    try:
+        return c.request("system.status")["data"]["heapFree"]
+    finally:
+        c.close()
+
+
+def run_http(args):
+    rng = {"from": args.date_from, "to": args.date_to}
+    c = Client(args.host, args.port)
+    if not c.login(args.user, args.password).get("ok"):
+        print("dang nhap that bai")
+        return 1
+    link = c.request("web.link")["data"]
+    path = f"/api/{link['key']}/range?from={args.date_from}&to={args.date_to}"
+    hport = link["port"]
+    rows = []
+
+    # 1) Byte mỗi yêu cầu: cùng dữ liệu, cùng khoảng ngày
+    msg = {"id": 1, "cmd": "calendar.range", "token": c.token, "data": rng}
+    reply = c.request("calendar.range", rng)
+    t_sent, t_recv = tcp_frame_sizes(msg, reply)
+    h = HttpConn(args.host, hport)
+    st, body, h_sent, h_recv = h.get(path)
+    h.close()
+    if st != 200:
+        print(f"HTTP tra {st}: {body[:120]!r}")
+        return 1
+    items_tcp, items_http = len(reply["data"]["items"]), len(json.loads(body)["items"])
+    rows += [["bytes_request", "tcp", 1, t_sent, "byte"], ["bytes_response", "tcp", 1, t_recv, "byte"],
+             ["bytes_request", "http", 1, h_sent, "byte"], ["bytes_response", "http", 1, h_recv, "byte"],
+             ["items", "tcp", 1, items_tcp, "buoi"], ["items", "http", 1, items_http, "buoi"]]
+    print(f"byte/yeu cau  TCP: gui {t_sent}, nhan {t_recv} ({items_tcp} buoi) | "
+          f"HTTP: gui {h_sent}, nhan {h_recv} ({items_http} buoi)")
+
+    # 2) Thời gian khứ hồi theo số client: TCP giữ kết nối; HTTP giữ kết nối và HTTP mở kết nối mới mỗi lần
+    def measure(kind, n):
+        lat, errors, lock = [], [0], threading.Lock()
+        ready = threading.Barrier(n)
+
+        def worker():
+            try:
+                if kind == "tcp":
+                    cl = Client(args.host, args.port)
+                    cl.token = c.token
+                else:
+                    cl = HttpConn(args.host, hport, keep_alive=(kind == "http_keepalive"))
+            except OSError:
+                with lock:
+                    errors[0] += args.requests
+                ready.wait()
+                return
+            ready.wait()
+            local = []
+            for _ in range(args.requests):
+                t0 = time.perf_counter()
+                try:
+                    if kind == "tcp":
+                        ok = cl.request("calendar.range", rng).get("ok")
+                    else:
+                        ok = cl.get(path)[0] == 200
+                    if ok:
+                        local.append((time.perf_counter() - t0) * 1000)
+                    else:
+                        with lock:
+                            errors[0] += 1
+                except (OSError, TimeoutError, ConnectionError, ValueError):
+                    with lock:
+                        errors[0] += 1
+                    if kind != "tcp":
+                        cl.close()
+            cl.close()
+            with lock:
+                lat.extend(local)
+
+        threads = [threading.Thread(target=worker) for _ in range(n)]
+        t_start = time.perf_counter()
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        elapsed = time.perf_counter() - t_start
+        return lat, errors[0], elapsed
+
+    for n in [int(x) for x in args.clients.split(",")]:
+        for kind in ("tcp", "http_keepalive", "http_new_conn"):
+            lat, err, elapsed = measure(kind, n)
+            if not lat:
+                print(f"{kind} {n} client: khong co yeu cau nao thanh cong ({err} loi)")
+                rows.append(["rtt_avg_ms", kind, n, "", "ms"])
+                continue
+            avg, p95 = statistics.mean(lat), percentile(lat, 95)
+            rows += [["rtt_avg_ms", kind, n, round(avg, 2), "ms"], ["rtt_p95_ms", kind, n, round(p95, 2), "ms"],
+                     ["rtt_max_ms", kind, n, round(max(lat), 2), "ms"],
+                     ["throughput", kind, n, round(len(lat) / elapsed, 1), "yeu cau/giay"], ["errors", kind, n, err, "lan"]]
+            print(f"{kind:15s} {n} client: TB {avg:.2f} ms, p95 {p95:.2f} ms, {len(lat) / elapsed:.1f} yc/giay, loi {err}")
+
+    # 3) RAM mỗi kết nối: heapFree trước và sau khi mở K kết nối đang chờ (đã dùng một lần)
+    k = args.idle
+    base = heap_free(args)
+    held = []
+    for _ in range(k):
+        cl = Client(args.host, args.port)
+        cl.token = c.token
+        cl.request("system.ping")
+        held.append(cl)
+    time.sleep(0.5)
+    after_tcp = heap_free(args)
+    for cl in held:
+        cl.close()
+    time.sleep(1.0)
+    base2 = heap_free(args)
+    held = []
+    for _ in range(k):
+        hc = HttpConn(args.host, hport)
+        hc.get(path)
+        held.append(hc)
+    time.sleep(0.5)
+    after_http = heap_free(args)
+    for hc in held:
+        hc.close()
+    ram_tcp, ram_http = (base - after_tcp) / k, (base2 - after_http) / k
+    rows += [["ram_per_conn", "tcp", k, round(ram_tcp), "byte"], ["ram_per_conn", "http_keepalive", k, round(ram_http), "byte"]]
+    print(f"RAM moi ket noi ({k} ket noi dang cho): TCP {ram_tcp:.0f} byte, HTTP {ram_http:.0f} byte")
+
+    write_csv("compare_http.csv", ["metric", "transport", "clients", "value", "unit"], rows)   # giữ số đã đo nếu bước sau lỗi
+
+    # 4) Độ trễ nhận thay đổi: B tạo rồi xoá một công việc, đo lúc A nhận tin đẩy "task"
+    token = c.token
+    c.close()                                            # c đã im quá lâu trong lúc đo HTTP, server có thể đã đóng (60 giây)
+    c = Client(args.host, args.port)
+    c.token = token
+    a = Client(args.host, args.port)
+    a.token = c.token
+    a.request("system.ping")                             # phiên đã đăng nhập mới nhận tin đẩy
+    delays = []
+    for i in range(args.push_rounds):
+        t0 = time.perf_counter()
+        r = c.request("task.create", {"title": f"loadtest push {i}", "day": args.date_from, "start": "23:00",
+                                      "deadline": True})
+        if not r.get("ok"):
+            print(f"task.create loi: {r.get('error')}")
+            break
+        try:
+            while True:
+                f = a.recv_frame(timeout=3)
+                if f.get("push") and f.get("entity") == "task":
+                    delays.append((time.perf_counter() - t0) * 1000)
+                    break
+        except (TimeoutError, OSError):
+            pass
+        c.request("task.delete", {"id": r["data"]["id"]})
+        try:                                             # bỏ tin đẩy của lệnh xoá
+            while True:
+                f = a.recv_frame(timeout=0.5)
+        except (TimeoutError, OSError):
+            pass
+    a.close()
+    c.close()
+    if delays:
+        rows += [["push_delay_avg_ms", "tcp", len(delays), round(statistics.mean(delays), 2), "ms"],
+                 ["push_delay_p95_ms", "tcp", len(delays), round(percentile(delays, 95), 2), "ms"],
+                 ["poll_delay_avg_ms", "http_poll_60s", 0, 30000, "ms (ly thuyet: nua chu ky hoi vong)"]]
+        print(f"tin day TCP: TB {statistics.mean(delays):.2f} ms, p95 {percentile(delays, 95):.2f} ms "
+              f"({len(delays)} lan); web hoi vong 60 giay: TB 30000 ms")
+    write_csv("compare_http.csv", ["metric", "transport", "clients", "value", "unit"], rows)
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="Đo thực nghiệm giao thức TCP ESPEduShed")
-    ap.add_argument("scenario", choices=["latency", "fragment", "maxconn", "replay"])
+    ap.add_argument("scenario", choices=["latency", "fragment", "maxconn", "replay", "http"])
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=5000)
     ap.add_argument("--user")
@@ -189,9 +436,16 @@ def main():
     ap.add_argument("--cmd", default="system.ping")
     ap.add_argument("--data")
     ap.add_argument("--count", type=int, default=10)
+    ap.add_argument("--from", dest="date_from", default="2026-09-07", help="http: ngày đầu của khoảng lịch")
+    ap.add_argument("--to", dest="date_to", default="2026-09-13", help="http: ngày cuối của khoảng lịch")
+    ap.add_argument("--idle", type=int, default=3, help="http: số kết nối mở để đo RAM mỗi kết nối")
+    ap.add_argument("--push-rounds", type=int, default=20, help="http: số lần đo độ trễ tin đẩy")
     args = ap.parse_args()
-    {"latency": run_latency, "fragment": run_fragment, "maxconn": run_maxconn, "replay": run_replay}[args.scenario](args)
-    return 0
+    if args.scenario in ("replay", "http") and not args.user:
+        args.user = "admin"
+    fn = {"latency": run_latency, "fragment": run_fragment, "maxconn": run_maxconn, "replay": run_replay,
+          "http": run_http}[args.scenario]
+    return fn(args) or 0
 
 
 if __name__ == "__main__":
