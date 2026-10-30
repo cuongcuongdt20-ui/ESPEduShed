@@ -18,18 +18,18 @@
 
 ## 1.3. Group
 
-| No. | Student ID | Full Name | Email | Main Responsibility | Contribution |
+| No. | Student ID | Full Name | Main Responsibility | Contribution |
 | :-: | :--------: | :-------- | :---- | :------------------ | -----------: |
-| 1 | *[Điền MSSV 1]* | *[Họ tên TV1]* | *[email1@ptit.edu.vn]* | **Trưởng nhóm & Network/Platform**: Thiết kế kiến trúc mạng, TCP Server đa luồng với `select()`, bộ tách/ghép khung (Framing), Session/Auth (Challenge–Response, chống Brute-force/Replay), LittleFS Storage, Electron TCP Client & Auth Core | 25% |
-| 2 | *[Điền MSSV 2]* | *[Họ tên TV2]* | *[email2@ptit.edu.vn]* | **Catalog & Service Discovery**: Module trường, cơ sở, bảng tiết học linh hoạt, quy đổi tiết, ma trận thời gian di chuyển, UDP Discovery (port 5001), mDNS Service, UI Catalog & Discovery Client | 25% |
-| 3 | *[Điền MSSV 3]* | *[Họ tên TV3]* | *[email3@ptit.edu.vn]* | **Schedule & Task Management**: Module lịch dạy định kỳ, công việc/hạn chót cá nhân, hệ thống ngoại lệ (dời/huỷ/bù), thuật toán sinh buổi (`sched_expand`), UI Quản lý lịch & công việc | 25% |
-| 4 | *[Điền MSSV 4]* | *[Họ tên TV4]* | *[email4@ptit.edu.vn]* | **Calendar & Conflict Detection**: Thuật toán quét và phát hiện trùng lịch/xung đột thời gian di chuyển, API `calendar.week`/`range`, FullCalendar UI, Bảng xung đột, Xuất PDF thời khóa biểu | 25% |
+| 1 | *[B23DCCN112]* | *[Nguyễn Duy Cường]* | **Trưởng nhóm & Network/Platform**: Thiết kế kiến trúc mạng, TCP Server đa luồng với `select()`, bộ tách/ghép khung (Framing), Session/Auth (Challenge–Response, chống Brute-force/Replay), LittleFS Storage, Electron TCP Client & Auth Core | 25% |
+| 2 | *[B23DCCN486]* | *[Nguyễn Khánh Linh]* | **Catalog & Service Discovery**: Module trường, cơ sở, bảng tiết học linh hoạt, quy đổi tiết, ma trận thời gian di chuyển, UDP Discovery (port 5001), mDNS Service, UI Catalog & Discovery Client | 25% |
+| 3 | *[B23DCCN584]* | *[Nguyễn Hoàng Nam]* | **Schedule & Task Management**: Module lịch dạy định kỳ, công việc/hạn chót cá nhân, hệ thống ngoại lệ (dời/huỷ/bù), thuật toán sinh buổi (`sched_expand`), UI Quản lý lịch & công việc | 25% |
+| 4 | *[B23DCCN559]* | *[Nguyễn Quang Minh]* | **Calendar & Conflict Detection**: Thuật toán quét và phát hiện trùng lịch/xung đột thời gian di chuyển, API `calendar.week`/`range`, FullCalendar UI, Bảng xung đột, Xuất PDF thời khóa biểu | 25% |
 | | | | | **Total** | **100%** |
 
 ## 1.4. Instructor
 
-**[Tên Giảng Viên Hướng Dẫn]**  
-Bộ môn Mạng và Hệ thống Thông tin – Học viện Công nghệ Bưu chính Viễn thông (PTIT)
+**[ThS Ngô Văn Quyền]**  
+Bộ môn Lập trình mạng – Học viện Công nghệ Bưu chính Viễn thông (PTIT)
 
 ---
 
@@ -995,5 +995,5 @@ NhomXX_ESPEduShed/
 # 24. Contact
 
 Mọi thông tin trao đổi hoặc thắc mắc về đề tài **ESPEduShed**, vui lòng liên hệ:
-- **Trưởng nhóm:** *[Họ tên Trưởng nhóm]* – Email: *[email_truong_nhom@ptit.edu.vn]* – SĐT: *[09xxxxxxxx]*
-- **Giảng viên phụ trách học phần:** *[Tên Giảng Viên]* – Bộ môn Mạng máy tính & Hệ thống thông tin, Học viện Công nghệ Bưu chính Viễn thông.
+- **Trưởng nhóm:** *[Nguyễn Duy Cường]* – Email: *[CuongND.B23CN112@ptit.edu.vn]*
+- **Giảng viên phụ trách học phần:** *[ThS Ngô Văn Quyền]* – Bộ môn Lập trình mạng.
