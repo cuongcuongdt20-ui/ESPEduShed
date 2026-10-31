@@ -136,8 +136,10 @@ client                                                   server
 
 - `system.status` dùng cho trang trạng thái của app và cho đo thực nghiệm (RAM, số yêu cầu, handler chậm nhất).
 - Sao lưu / khôi phục đi theo từng mẩu 4 KB vì một khung tối đa 8 KB. `file` chỉ gồm chữ thường, số, `_`, đuôi `.json`.
-  Khôi phục ghi vào `<file>.restore`, mẩu cuối (`last: true`) mới đổi tên đè file thật. Khôi phục xong file cuối thì
-  gửi `reboot: true` để mọi module nạp lại dữ liệu.
+  Khôi phục ghi vào `<file>.restore`, mẩu cuối (`last: true`) mới kiểm tra cấu trúc rồi đổi tên đè file thật. File
+  không phải JSON Lines hoặc object JSON có `schema` thì trả `BAD_ARG` (`field: "data"`), file thật giữ nguyên. Đây chỉ là
+  kiểm tra cấu trúc: file JSON Lines bị cắt đúng ở cuối một dòng vẫn được nhận. Khôi phục
+  xong file cuối thì gửi `reboot: true` để mọi module nạp lại dữ liệu.
 
 ### 2.4 Bảng lệnh `web.*` (link xem lịch trên điện thoại)
 

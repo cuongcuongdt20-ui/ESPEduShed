@@ -4,10 +4,12 @@
 
 Thứ tự: thời gian khứ hồi (3 lệnh × số client × số lần lặp), ghép khung, giới hạn kết nối, gửi lại gói đăng nhập,
 so với HTTP, lỗi giao thức, biên khoảng ngày, reset giữa lúc ghi (cần --serial, dùng pyserial: chạy bằng Python của
-ESP-IDF hoặc pip install pyserial), cuối cùng là sai mật khẩu (khoá IP của máy chạy trong 60 giây).
+ESP-IDF hoặc pip install pyserial), khôi phục dữ liệu (ESP khởi động lại một lần), cuối cùng là sai mật khẩu (khoá IP
+của máy chạy trong 60 giây).
 Không sửa số liệu: chạy lại nếu cần số mới.
 """
 import argparse
+import base64
 import csv
 import json
 import os
@@ -16,6 +18,7 @@ import socket
 import statistics
 import struct
 import sys
+import threading
 import time
 
 import loadtest
@@ -243,6 +246,159 @@ def run_lockout(args):
     write("lockout.csv", ["attempt", "expected", "actual", "passed"], rows)
 
 
+def read_backup(c, name):
+    data, offset = b"", 0
+    while True:
+        d = c.request("system.backup", {"file": name, "offset": offset})["data"]
+        chunk = base64.b64decode(d["data"])
+        data += chunk
+        offset += len(chunk)
+        if d["eof"]:
+            return data
+
+
+def send_restore(c, name, content, reboot=False):
+    """Gửi cả file theo từng mẩu 4 KB như app sẽ làm. Trả phản hồi của mẩu lỗi đầu tiên hoặc của mẩu cuối."""
+    offset = 0
+    while True:
+        chunk = content[offset:offset + 4096]
+        last = offset + len(chunk) >= len(content)
+        r = c.request("system.restore", {"file": name, "offset": offset, "data": base64.b64encode(chunk).decode(),
+                                         "last": last, "reboot": reboot and last}, timeout=15)
+        if last or not r.get("ok"):
+            return r
+        offset += len(chunk)
+
+
+def run_restore(args):
+    """Khôi phục trên bo thật, ngay sau khi tự sao lưu nên dữ liệu không đổi. Cuối kịch bản ESP khởi động lại:
+    - bản hỏng (bị cắt, rác) phải bị từ chối, file thật giữ nguyên và server vẫn ghi được;
+    - bản đúng phải được nhận, sau khi khởi động lại dữ liệu trùng khớp từng byte."""
+    name = "schedule.json"
+    rows = []
+
+    def add(case, expect, got):
+        rows.append([case, expect, got, int(got == expect)])
+        print(f"{case:32s} mong doi {expect:8s} thuc te {got}")
+
+    def code(r):
+        return "OK" if r.get("ok") else r["error"]["code"]
+
+    c = Client(args.host, args.port)
+    if not c.login(args.user, args.password).get("ok"):
+        raise RuntimeError("dang nhap that bai")
+    original = read_backup(c, name)
+    add("sao_luu_duoc", "OK", "OK" if original else "RONG")
+    add("ban_bi_cat", "BAD_ARG", code(send_restore(c, name, original[:-2])))     # cắt giữa dòng cuối
+    add("ban_rac", "BAD_ARG", code(send_restore(c, name, b"khong phai json\n")))
+    add("file_that_giu_nguyen", "OK", "OK" if read_backup(c, name) == original else "KHAC")
+
+    # Server chưa bị chặn ghi: tạo một công việc, chờ qua cửa sổ ghi trễ 1 giây, file phải đổi; xoá rồi file được ghi lại
+    t = c.request("task.create", {"title": "restore test", "day": args.date_from, "start": "23:30", "deadline": True})
+    time.sleep(2)
+    add("van_ghi_duoc_sau_khi_tu_choi", "OK", "OK" if t.get("ok") and read_backup(c, name) != original else "KHONG")
+    c.request("task.delete", {"id": t["data"]["id"]})
+    time.sleep(2)
+    original = read_backup(c, name)            # nextId đã tăng: đây là bản chuẩn để so sau khi khôi phục
+
+    r = send_restore(c, name, original, reboot=True)
+    add("ban_dung", "OK", code(r))
+    c.close()
+    time.sleep(3)                              # ESP khởi động lại sau 1,5 giây: đừng ping nhầm lúc nó chưa tắt
+    back = wait_back(args, time.perf_counter())
+    if back is None:
+        add("len_lai_sau_khoi_phuc", "OK", "KHONG")
+    else:
+        c = Client(args.host, args.port)
+        if not c.login(args.user, args.password).get("ok"):
+            raise RuntimeError("dang nhap that bai sau khi khoi phuc")
+        add("du_lieu_trung_sau_khoi_dong_lai", "OK", "OK" if read_backup(c, name) == original else "KHAC")
+        c.close()
+    write("restore_check.csv", ["case", "expected", "actual", "passed"], rows)
+
+
+def run_concurrent(args):
+    """Nhiều client cùng tạo công việc một lúc: không được mất hay trùng bản ghi, sau khi gộp ghi 1 giây file phải có đủ.
+    Đếm thêm tin đẩy mỗi client nhận được; hàng đợi tin đẩy 32 phần tử, đầy thì bỏ, nên có thể thiếu khi tải dồn."""
+    n_clients, per_client = 4, 10
+    title = "concurrent test"
+    results, lock, barrier = [], threading.Lock(), threading.Barrier(n_clients)
+
+    def session():
+        c = Client(args.host, args.port)
+        if not c.login(args.user, args.password).get("ok"):
+            raise RuntimeError("dang nhap that bai")
+        return c
+
+    def task_ids(c):
+        out, off = [], 0
+        while True:
+            d = c.request("task.list", {"offset": off})["data"]
+            out += [t["id"] for t in d["tasks"] if t["title"].startswith(title)]
+            if "next" not in d:
+                return out
+            off = d["next"]
+
+    def worker(c, k):
+        ids, errors, t0 = [], 0, time.perf_counter()
+        barrier.wait()
+        for i in range(per_client):
+            r = c.request("task.create", {"title": f"{title} {k} {i}", "day": args.date_from, "start": "23:30", "deadline": True},
+                          timeout=15)
+            if r.get("ok"):
+                ids.append(r["data"]["id"])
+            else:
+                errors += 1
+        with lock:
+            results.append((ids, errors, time.perf_counter() - t0))
+
+    clients = [session() for _ in range(n_clients)]
+    for t in task_ids(clients[0]):                        # dọn lần chạy trước
+        clients[0].request("task.delete", {"id": t})
+    time.sleep(1.5)
+    for c in clients:                                     # bỏ tin đẩy cũ trước khi đếm
+        c.pending.clear()
+    threads = [threading.Thread(target=worker, args=(c, k)) for k, c in enumerate(clients)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    expected = n_clients * per_client
+    created = [i for ids, _, _ in results for i in ids]
+    errors = sum(e for _, e, _ in results)
+    time.sleep(2)                                         # qua cửa sổ gộp ghi 1 giây
+
+    pushes = []
+    for c in clients:
+        got = 0
+        c.sock.settimeout(0.3)
+        while True:
+            try:
+                f = c.recv_frame(timeout=0.3)
+            except (TimeoutError, OSError):
+                break
+            got += "push" in f
+        pushes.append(got)
+
+    listed = task_ids(clients[0])
+    file_data = read_backup(clients[0], "schedule.json").decode("utf-8", "replace")
+    in_file = sum(f'"id":{i},' in file_data or f'"id":{i}}}' in file_data for i in created)
+    rows = [["so_lenh_loi", 0, errors, int(errors == 0)],
+            ["ban_ghi_tao_duoc", expected, len(created), int(len(created) == expected)],
+            ["id_khong_trung", expected, len(set(created)), int(len(set(created)) == expected)],
+            ["co_trong_task_list", expected, sum(i in listed for i in created), int(set(created) <= set(listed))],
+            ["co_trong_file_sau_2_giay", expected, in_file, int(in_file == expected)],
+            ["tin_day_it_nhat_moi_client", expected, min(pushes), int(min(pushes) == expected)]]
+    for r in rows:
+        print(f"{r[0]:28s} mong doi {r[1]:3d} thuc te {r[2]:3d} {'DAT' if r[3] else 'KHONG DAT'}")
+    print(f"thoi gian tao: {max(x[2] for x in results):.2f} giay; tin day moi client: {pushes}")
+    for t in task_ids(clients[0]):
+        clients[0].request("task.delete", {"id": t})
+    for c in clients:
+        c.close()
+    write("concurrent_write.csv", ["case", "expected", "actual", "passed"], rows)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Chạy toàn bộ kịch bản đo tự động trên ESP32")
     ap.add_argument("--host", required=True)
@@ -257,13 +413,14 @@ def main():
     ap.add_argument("--serial", help="cổng COM của ESP để reset (kịch bản reset)")
     ap.add_argument("--reset-rounds", type=int, default=10)
     ap.add_argument("--only", help="chỉ chạy các phần này, cách nhau dấu phẩy: latency,fragment,maxconn,replay,http,"
-                                   "errors,range,reset,lockout")
+                                   "errors,range,concurrent,discovery,reset,restore,lockout")
     ap.add_argument("--no-wait-unlock", dest="wait_unlock", action="store_false")
     args = ap.parse_args()
     args.data, args.cmd, args.count, args.idle, args.push_rounds = None, "system.ping", 10, 3, 20
     steps = [("latency", run_latency_series), ("fragment", loadtest.run_fragment), ("maxconn", loadtest.run_maxconn),
              ("replay", loadtest.run_replay), ("http", lambda a: loadtest.run_http(ns(a, clients="1,4"))),
-             ("errors", run_errors), ("range", run_range), ("reset", run_reset), ("lockout", run_lockout)]
+             ("errors", run_errors), ("range", run_range), ("concurrent", run_concurrent),
+             ("discovery", loadtest.run_discovery), ("reset", run_reset), ("restore", run_restore), ("lockout", run_lockout)]
     only = set(args.only.split(",")) if args.only else None
     status = {}
     with socket.create_connection((args.host, args.port), timeout=5) as s:     # kiểm tra trước: có thấy ESP không

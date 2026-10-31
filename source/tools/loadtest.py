@@ -18,6 +18,8 @@ Kịch bản:
             RAM mỗi kết nối (heapFree), độ trễ nhận thay đổi (tin đẩy TCP; web hỏi vòng 60 giây)
             python loadtest.py http --host 192.168.1.37 --password ... --clients 1,4 --requests 200
                                     --from 2026-09-07 --to 2026-09-13
+  discovery gửi gói tìm server tới cổng UDP 5001 của ESP: gói đúng được trả lời, gói sai bị bỏ qua
+            python loadtest.py discovery --host 192.168.1.37 --count 20
 """
 import argparse
 import csv
@@ -165,6 +167,40 @@ def run_maxconn(args):
     for c in conns:
         c.close()
     write_csv("maxconn.csv", ["connection", "result"], rows)
+
+
+def run_discovery(args):
+    """Gửi UDP thẳng tới ESP (cổng 5001): gói đúng phải được trả lời đúng IP và cổng TCP, gói sai bị bỏ qua.
+    Gửi cách nhau 0,2 giây để không chạm giới hạn 10 trả lời/giây. Chưa thử broadcast và mDNS."""
+    rows = []
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(1.0)
+
+    def ask(payload):
+        s.sendto(payload, (args.host, 5001))
+        t0 = time.perf_counter()
+        try:
+            data, addr = s.recvfrom(512)
+            return json.loads(data), addr[0], (time.perf_counter() - t0) * 1000
+        except (TimeoutError, socket.timeout):
+            return None, "", None
+
+    got, lat = 0, []
+    for _ in range(args.count):
+        reply, ip, ms = ask(b"ESPEDUSHED_DISCOVER")
+        if reply and reply.get("ip") == args.host and ip == args.host and reply.get("port") == args.port:
+            got += 1
+            lat.append(ms)
+        time.sleep(0.2)
+    rows.append(["goi_dung", args.count, got, int(got == args.count), round(statistics.mean(lat), 2) if lat else ""])
+    for name, payload in (("sai_noi_dung", b"ESPEDUSHED_DISCOVEX"), ("thua_byte", b"ESPEDUSHED_DISCOVER!"), ("thieu_byte", b"ESPEDUSHED")):
+        reply, _, _ = ask(payload)
+        rows.append([name, 0, int(reply is not None), int(reply is None), ""])
+        time.sleep(0.2)
+    for r in rows:
+        print(f"{r[0]:14s} mong doi {r[1]} tra loi, thuc te {r[2]}, RTT TB {r[4]} ms")
+    s.close()
+    write_csv("discovery.csv", ["case", "expected_replies", "actual_replies", "passed", "rtt_avg_ms"], rows)
 
 
 def run_replay(args):
@@ -426,7 +462,7 @@ def run_http(args):
 
 def main():
     ap = argparse.ArgumentParser(description="Đo thực nghiệm giao thức TCP ESPEduShed")
-    ap.add_argument("scenario", choices=["latency", "fragment", "maxconn", "replay", "http"])
+    ap.add_argument("scenario", choices=["latency", "fragment", "maxconn", "replay", "http", "discovery"])
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=5000)
     ap.add_argument("--user")
@@ -444,7 +480,7 @@ def main():
     if args.scenario in ("replay", "http") and not args.user:
         args.user = "admin"
     fn = {"latency": run_latency, "fragment": run_fragment, "maxconn": run_maxconn, "replay": run_replay,
-          "http": run_http}[args.scenario]
+          "http": run_http, "discovery": run_discovery}[args.scenario]
     return fn(args) or 0
 
 

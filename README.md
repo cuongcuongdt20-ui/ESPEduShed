@@ -745,12 +745,12 @@ python source/tools/fake_server.py --dev      # mật khẩu admin123
 # schedule_store (TV3); calendar, calendar_cmd (TV4)
 # (Windows: cài GCC bằng `winget install BrechtSanders.WinLibs.POSIX.UCRT`, rồi trong Git Bash chạy
 #  mingw32-make CC=gcc CJSON_DIR=C:/Espressif/v5.5.6/esp-idf/components/json/cJSON
-#  Hoặc dùng MSYS2/WSL có gcc và make. catalog_cmd, schedule_cmd,
+#  Hoặc dùng MSYS2/WSL có gcc và make. restore_check, catalog_cmd, schedule_cmd,
 #  schedule_store và calendar_cmd cần cJSON của ESP-IDF: lấy theo IDF_PATH sau khi chạy export
-#  của ESP-IDF, hoặc đặt CJSON_DIR. Không thấy cJSON thì make báo bỏ qua 4 bộ đó.)
+#  của ESP-IDF, hoặc đặt CJSON_DIR. Không thấy cJSON thì make báo bỏ qua 5 bộ đó.)
 cd source/server/test_host
-make                   # chạy cả 8 bộ test (4 bộ nếu không có cJSON)
-# hoặc chạy từng phần: make platform | catalog | catalog_cmd | schedule | schedule_cmd |
+make                   # chạy cả 9 bộ test (4 bộ nếu không có cJSON)
+# hoặc chạy từng phần: make platform | restore_check | catalog | catalog_cmd | schedule | schedule_cmd |
 # schedule_store | calendar | calendar_cmd
 
 # App: ghép khung, PBKDF2/HMAC phía client, gợi ý giờ tiết
@@ -767,6 +767,15 @@ python loadtest.py fragment --host 192.168.1.37
 # (kịch bản reset cần pyserial: chạy bằng Python của ESP-IDF hoặc pip install pyserial)
 python run_experiments.py --host 192.168.1.37 --password <mat_khau> --serial COM3 --repeats 3
 python loadtest.py http --host 192.168.1.37 --password <mat_khau>    # riêng phép so với HTTP
+
+# Sau khi nạp firmware mới: chỉ chạy lại reset giữa lúc ghi và khôi phục dữ liệu (ESP khởi động lại)
+python run_experiments.py --host 192.168.1.37 --password <mat_khau> --serial COM3 --only reset,restore
+
+# Nhiều client cùng ghi: 4 client × 10 công việc, không mất, không trùng, có đủ trong file
+python run_experiments.py --host 192.168.1.37 --password <mat_khau> --only concurrent
+
+# Tìm server: gói đúng được trả lời, gói sai bị bỏ qua (không cần đăng nhập)
+python loadtest.py discovery --host 192.168.1.37 --count 20
 ```
 
 ---
@@ -786,14 +795,16 @@ Cột Test chỉ ghi những gì đã chạy thật. Test trên máy tính: Wind
 | 6 | Bắt đổi mật khẩu lần đầu | Mọi lệnh khác trả `FORBIDDEN` | Đạt với `fake_server.py`; chưa chạy riêng trên ESP32 |
 | 7 | Tin đẩy thời gian thực | Sửa lịch ở client A, client B nhận `changed` | Đạt trên ESP32, trễ trung bình 147,7 ms (`compare_http_run*.csv`) |
 | 8 | Tự nối lại khi mất kết nối | App thử lại mỗi 2 giây, tự đăng nhập lại nếu ESP đã khởi động lại | Đạt với `fake_server.py`; chưa đo với app trên ESP32 |
-| 9 | Wi-Fi AP cài đặt, sao lưu / khôi phục | `system.wifi`, `system.backup`, `system.restore` | Đã viết, chưa chạy trên ESP32 |
+| 9 | Wi-Fi AP cài đặt, sao lưu / khôi phục | `system.wifi`, `system.backup`, `system.restore`; file khôi phục hỏng bị từ chối, giữ nguyên dữ liệu cũ | Kiểm tra file: `make restore_check` đạt; luồng đầy đủ chưa chạy trên ESP32 (`run_experiments.py --only restore`) |
 | 10 | Danh mục trường, bảng tiết (TV2) | Quy đổi tiết, tiết không liên tục, 25 lệnh CRUD, gợi ý tiết 50 phút trên form | `make catalog` đạt 19/19, `make catalog_cmd` đạt 178/178; `school.list`, `campus.list` đạt trên ESP32 |
 | 11 | Lịch dạy, công việc, ngoại lệ (TV3) | Sinh buổi, huỷ, dời, đổi phòng, dạy bù, hạn chót; lưu JSON Lines | `make schedule` đạt 44/44, `make schedule_cmd` đạt 134/134, `make schedule_store` đạt 39/39; `occurrence.range`, `task.create`, `task.delete` đạt trên ESP32 |
 | 12 | Lịch tuần FullCalendar, kiểm tra trùng (TV4) | Trùng giờ, thiếu thời gian di chuyển, xác nhận xung đột | `make calendar` đạt 29/29, `make calendar_cmd` đạt 97/97; `calendar.week`, `calendar.range` đạt trên ESP32 |
 | 13 | Một tài khoản duy nhất | Đăng nhập chỉ bằng mật khẩu; `users.json` bản nhiều tài khoản tự chuyển sang, giữ tài khoản admin | Đăng nhập đạt trên ESP32 sau khi nạp đè firmware mới |
-| 14 | Web xem lịch trên điện thoại | `/c/<khoá>`, sai khoá trả 404, `web.rotate` làm link cũ hết hiệu lực | API `/api/<khoá>/range` đạt trên ESP32 (`compare_http_run*.csv`); chưa kiểm tra trang trên điện thoại, sai khoá và `web.rotate` |
-| 15 | DuckDNS, truy cập từ mạng ngoài | Cập nhật IP mỗi 5 phút, app nối bằng tên miền | Build đạt; chưa chạy thử |
+| 14 | Web xem lịch trên điện thoại | `/c/<khoá>`, sai khoá trả 404, `web.rotate` làm link cũ hết hiệu lực | API `/api/<khoá>/range` đạt trên ESP32 (`compare_http_run*.csv`); sai khoá trả 404 trên fw 1.0.1; chưa kiểm tra trang trên điện thoại và `web.rotate` |
+| 15 | DuckDNS, truy cập từ mạng ngoài | Cập nhật IP mỗi 5 phút, app nối bằng tên miền Log serial xác nhận ESP32 cập nhật DuckDNS thành công; nhóm đã thử vào app và link từ mạng ngoài, đạt; chưa đo hiệu năng |
 | 16 | Chọn màu cho lịch dạy, công việc, trường | Bảng 12 màu, hiện trên lịch app và web | `npm run typecheck` đạt; chưa kiểm tra trên giao diện với ESP32 |
+| 17 | Mã QR cho link xem lịch | App tự sinh mã bằng `qrcode.react`, không gửi link ra dịch vụ ngoài | Giải mã ảnh QR sinh ra đúng link (jsQR, OpenCV); chưa quét bằng điện thoại thật |
+| 18 | Tìm server bằng UDP, mDNS | Trả lời gói `ESPEDUSHED_DISCOVER`, bỏ qua gói sai | UDP gửi thẳng trên fw 1.0.1: 20/20 gói đúng, 3/3 gói sai bị bỏ qua (`fw_1.0.1/discovery.csv`); broadcast chưa đo; laptop đo chưa phân giải được `espedushed.local` |
 
 ---
 
@@ -803,7 +814,7 @@ Cột Test chỉ ghi những gì đã chạy thật. Test trên máy tính: Wind
 
 | Mục | Giá trị |
 | :--- | :--- |
-| Server | ESP32-S3, flash 16 MB (bảng phân vùng dùng 8 MB), firmware từ commit `b4e0394`, đo ngày 30/10/2026 |
+| Server | ESP32-S3, flash 16 MB, PSRAM 8 MB chưa bật (đọc bằng `esptool flash_id`; bảng phân vùng dùng 8 MB), firmware từ commit `b4e0394`, đo ngày 30/10/2026 |
 | Client | Laptop Windows 11 Home, Python 3.14 |
 | Mạng | ESP32 và laptop cùng nối hotspot Wi-Fi 2,4 GHz phát từ điện thoại; RSSI của ESP từ −47 đến −50 dBm |
 | Phần mềm | ESP-IDF 5.5.6, GCC 16.2, Node.js 24 |
@@ -922,12 +933,15 @@ Số byte tính ở tầng ứng dụng, chưa gồm header TCP/IP.
 9. **Ghi trễ 1 giây:** dừng đột ngột trong cửa sổ này mất thay đổi cuối, dù file không hỏng (mục 14.1).
 10. **Không chống yêu cầu trùng:** tạo mới đã xử lý nhưng mất phản hồi, bấm lại sẽ tạo bản ghi thứ hai.
 11. **Web xem lịch không nhận tin đẩy:** trang tự tải lại khi chuyển tuần, khi mở lại và mỗi phút; muốn thấy ngay thì bấm **Làm mới**.
+12. **Đoán mật khẩu ngoại tuyến:** kẻ nghe lén lúc đăng nhập có `nonce`, `salt`, `iter` và `proof` nên có thể thử đoán nếu mật khẩu yếu. Token DuckDNS đi dạng rõ từ app tới ESP32 khi cấu hình bằng `system.ddns`; từ ESP32 tới DuckDNS thì qua HTTPS.
+13. **Khôi phục dữ liệu:** `system.restore` chỉ kiểm tra cấu trúc file (JSON Lines hoặc object JSON có `schema`), không kiểm tra từng bản ghi. File đúng cấu trúc nhưng sai nội dung vẫn thay file thật, ví dụ dữ liệu lịch gửi nhầm vào `users.json`, hoặc file JSON Lines bị cắt đúng ở cuối một dòng.
+14. **Phiên bản firmware:** số đo hiệu năng trong mục 14 thuộc commit `b4e0394` (fw 1.0.0). Fw 1.0.1 thêm kiểm tra kết quả `fsync`, `fclose` và kiểm tra file khôi phục, không đổi đường đọc đã đo. Đã nạp lên bo, ghép khung và giới hạn kết nối chạy lại đạt (`statics/results/fw_1.0.1/`); reset giữa lúc ghi và khôi phục chưa chạy lại (xem mục 11.4).
 
 ---
 
 # 17. Future Work
 
-1. Mã hoá kênh truyền bằng TLS (mbedTLS) với bộ đệm nhỏ, hoặc dùng module có PSRAM.
+1. Mã hoá kênh truyền bằng TLS (mbedTLS) với bộ đệm nhỏ, hoặc bật PSRAM 8 MB có sẵn trên bo (firmware hiện chưa dùng).
 2. Mã hoá phân vùng NVS và dùng Secure Boot.
 3. Xuất lịch sang định dạng iCalendar (`.ics`).
 4. Thêm màn hình e-paper trên ESP32 hiển thị lịch trong ngày.

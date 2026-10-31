@@ -94,9 +94,16 @@ bool storage_info(size_t *total, size_t *used)
 // khởi động lại, để bản cũ không đè lên file vừa khôi phục.
 static volatile bool s_writes_frozen;
 
-void store_freeze_writes(void)
+bool store_freeze_writes(void)
 {
+    bool was_frozen = s_writes_frozen;
     s_writes_frozen = true;
+    return was_frozen;
+}
+
+void store_unfreeze_writes(void)
+{
+    s_writes_frozen = false;
 }
 
 esp_err_t store_write_atomic(const char *path, const char *data, size_t len)
@@ -110,10 +117,9 @@ esp_err_t store_write_atomic(const char *path, const char *data, size_t len)
     FILE *f = fopen(tmp, "wb");
     if (!f) return ESP_FAIL;
     size_t w = fwrite(data, 1, len, f);
-    int flushed = fflush(f);
-    fsync(fileno(f));
-    fclose(f);
-    if (w != len || flushed != 0) {
+    bool synced = fflush(f) == 0 && fsync(fileno(f)) == 0;
+    bool closed = fclose(f) == 0;
+    if (w != len || !synced || !closed) {
         remove(tmp);
         ESP_LOGE(TAG, "ghi %s that bai (het cho?)", path);
         return ESP_ERR_NO_MEM;
@@ -165,9 +171,8 @@ bool store_put_line(store_writer_t *w, const char *line)
 esp_err_t store_end(store_writer_t *w, bool commit)
 {
     if (!w) return ESP_FAIL;
-    bool ok = w->ok && commit && fflush(w->f) == 0;
-    if (ok) fsync(fileno(w->f));
-    fclose(w->f);
+    bool ok = w->ok && commit && fflush(w->f) == 0 && fsync(fileno(w->f)) == 0;
+    if (fclose(w->f) != 0) ok = false;
     // Như store_write_atomic: mất điện trước rename còn bản cũ, sau rename là bản mới
     if (ok && rename(w->tmp, w->path) != 0) ok = false;
     if (!ok) remove(w->tmp);

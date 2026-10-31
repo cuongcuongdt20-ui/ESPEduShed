@@ -1,6 +1,7 @@
 # Test logic C trên máy tính (không cần ESP32). Cần gcc và make (Linux, macOS, WSL hoặc MSYS2 trên Windows).
-#   make              chạy cả 8 bộ test
+#   make              chạy cả 9 bộ test
 #   make platform     TV1: ghép khung TCP, phiên đăng nhập, chống dò mật khẩu
+#   make restore_check TV1: kiểm tra file sao lưu trước khi khôi phục (cần cJSON)
 #   make catalog      TV2: thư viện ngày giờ, quy đổi tiết
 #   make catalog_cmd  TV2: handler 25 lệnh danh mục (cần cJSON của ESP-IDF)
 #   make schedule     TV3: sinh buổi (dùng catalog giả)
@@ -18,11 +19,11 @@ B := build
 C := ../components
 
 # cJSON nằm trong ESP-IDF: lấy theo IDF_PATH (export.ps1 / export.sh của ESP-IDF đặt sẵn), hoặc đặt CJSON_DIR.
-# Không tìm thấy thì `make` vẫn chạy 4 bộ test không cần cJSON và báo bỏ qua 4 bộ còn lại.
+# Không tìm thấy thì `make` vẫn chạy 4 bộ test không cần cJSON và báo bỏ qua 5 bộ còn lại.
 CJSON_DIR ?= $(IDF_PATH)/components/json/cJSON
-CJSON_SUITES := catalog_cmd schedule_cmd schedule_store calendar_cmd
+CJSON_SUITES := restore_check catalog_cmd schedule_cmd schedule_store calendar_cmd
 
-.PHONY: all platform catalog catalog_cmd schedule schedule_cmd schedule_store calendar calendar_cmd cjson_missing clean
+.PHONY: all platform restore_check catalog catalog_cmd schedule schedule_cmd schedule_store calendar calendar_cmd cjson_missing clean
 all: platform catalog schedule calendar $(if $(wildcard $(CJSON_DIR)/cJSON.c),$(CJSON_SUITES),cjson_missing)
 
 cjson_missing:
@@ -30,6 +31,8 @@ cjson_missing:
 
 platform: $(B)/test_platform
 	./$(B)/test_platform
+restore_check: $(B)/test_restore_check
+	./$(B)/test_restore_check
 catalog: $(B)/test_catalog
 	./$(B)/test_catalog
 catalog_cmd: $(B)/test_catalog_cmd
@@ -65,6 +68,10 @@ $(B):
 
 clean:
 	rm -rf $(B)
+
+$(B)/test_restore_check: platform/test_restore_check.c $(C)/platform/src/restore_check.c \
+                        $(CJSON_DIR)/cJSON.c | $(B)
+		$(CC) $(CFLAGS) -I$(CJSON_DIR) $^ -o $@
 
 $(B)/test_catalog_cmd: catalog/test_catalog_cmd.c \
                         $(C)/catalog/src/catalog_cmd.c \

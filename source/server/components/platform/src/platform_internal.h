@@ -7,7 +7,7 @@
 #include "esp_err.h"
 #include "sdkconfig.h"
 
-#define LD_FW_VERSION      "1.0.0"
+#define LD_FW_VERSION      "1.0.1"
 #define LD_MAX_CLIENTS     CONFIG_LD_MAX_CLIENTS
 #define LD_UNAUTH_TIMEOUT_MS 30000      // kết nối 30 giây chưa đăng nhập thì đóng
 #define LD_IDLE_TIMEOUT_MS   60000      // im lặng 60 giây thì đóng
@@ -78,5 +78,6 @@ void ddns_status_json(cJSON *out);      // thêm "ddns": {domain, lastOk?, lastA
 // ---------- storage.c, time_svc.c
 esp_err_t storage_init(void);
 bool      storage_info(size_t *total, size_t *used);
-void      store_freeze_writes(void);     // system.restore gọi: chặn ghi tới khi khởi động lại
+bool      store_freeze_writes(void);     // system.restore gọi: chặn ghi tới khi khởi động lại; trả true nếu đã chặn từ trước
+void      store_unfreeze_writes(void);   // bỏ chặn khi chưa thay được file nào
 void      time_init(void);

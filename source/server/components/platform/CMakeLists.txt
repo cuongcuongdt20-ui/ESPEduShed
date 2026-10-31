@@ -2,7 +2,7 @@
 idf_component_register(
     SRCS "src/platform.c" "src/tcp_server.c" "src/frame.c" "src/protocol.c" "src/session.c" "src/limiter.c"
          "src/auth.c" "src/users.c" "src/crypto.c" "src/wifi.c" "src/time_svc.c" "src/storage.c"
-         "src/system_cmd.c" "src/ddns.c"
+         "src/system_cmd.c" "src/restore_check.c" "src/ddns.c"
     INCLUDE_DIRS "include"
     PRIV_INCLUDE_DIRS "src"
     REQUIRES json esp_common freertos

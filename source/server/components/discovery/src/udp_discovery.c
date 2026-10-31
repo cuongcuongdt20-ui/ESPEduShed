@@ -39,7 +39,7 @@ static void discovery_task(void *arg)
                 break;
             }
         }
-        char response[160]; int len = snprintf(response, sizeof(response), "{\"name\":\"espedushed\",\"ip\":\"%s\",\"port\":5000,\"fw\":\"1.0.0\"}", ip);
+        char response[160]; int len = snprintf(response, sizeof(response), "{\"name\":\"espedushed\",\"ip\":\"%s\",\"port\":5000,\"fw\":\"1.0.1\"}", ip);
         if (sendto(fd, response, len, 0, (struct sockaddr *)&peer, plen) >= 0) replies++;
     }
 }

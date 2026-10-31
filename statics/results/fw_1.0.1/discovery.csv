@@ -1,0 +1,5 @@
+case,expected_replies,actual_replies,passed,rtt_avg_ms
+goi_dung,20,20,1,169.27
+sai_noi_dung,0,0,1,
+thua_byte,0,0,1,
+thieu_byte,0,0,1,

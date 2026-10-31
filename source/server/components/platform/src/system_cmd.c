@@ -15,6 +15,7 @@
 #include "mbedtls/base64.h"
 #include "platform.h"
 #include "platform_internal.h"
+#include "restore_check.h"
 #include "session.h"
 
 #define CHUNK_RAW 4096
@@ -163,14 +164,24 @@ static int cmd_restore(const ld_ctx_t *ctx, const cJSON *data, cJSON *out)
     FILE *f = fopen(tmp, offset == 0 ? "wb" : "ab");
     if (!f) return ld_fail(out, LD_ERR_INTERNAL, "Khong mo duoc file tam", NULL);
     size_t w = fwrite(raw, 1, n, f);
-    fclose(f);
-    if (w != n) return ld_fail(out, LD_ERR_FULL, "Het cho luu", NULL);
+    bool closed = fclose(f) == 0;
+    if (w != n || !closed) return ld_fail(out, LD_ERR_FULL, "Het cho luu", NULL);
 
     if (last) {
         char path[48];
         snprintf(path, sizeof(path), "/data/%s", file);
-        store_freeze_writes();               // từ đây dữ liệu trong RAM đã cũ: không cho ghi đè file vừa khôi phục
-        if (rename(tmp, path) != 0) return ld_fail(out, LD_ERR_INTERNAL, "Khong thay duoc file", NULL);
+        if (!restore_file_valid(tmp)) {      // bản sao lưu hỏng: giữ nguyên file thật và cho ghi tiếp như thường
+            remove(tmp);
+            ESP_LOGW(TAG, "tu choi khoi phuc %s: noi dung khong hop le", file);
+            return ld_fail(out, LD_ERR_BAD_ARG, "File sao luu hong, giu nguyen du lieu cu", "data");
+        }
+        bool was_frozen = store_freeze_writes();   // từ đây dữ liệu trong RAM đã cũ: không cho ghi đè file vừa khôi phục
+        if (rename(tmp, path) != 0) {
+            remove(tmp);
+            // Đã thay file khác từ trước thì RAM vẫn cũ, phải chặn tiếp tới khi khởi động lại
+            if (!was_frozen) store_unfreeze_writes();
+            return ld_fail(out, LD_ERR_INTERNAL, "Khong thay duoc file", NULL);
+        }
         ESP_LOGW(TAG, "da khoi phuc %s, can khoi dong lai de nap", file);
     }
     cJSON_AddNumberToObject(out, "written", (double) (offset + (long) n));
