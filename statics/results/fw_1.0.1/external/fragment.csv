@@ -1,0 +1,4 @@
+scenario,bytes,frames,passed
+cat_tung_byte,32,1,1
+10_khung_dinh,340,10,1
+khung_qua_8kb,4,0,1

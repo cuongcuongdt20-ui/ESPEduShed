@@ -1,0 +1,7 @@
+case,expected,actual,passed
+so_lenh_loi,0,0,1
+ban_ghi_tao_duoc,40,40,1
+id_khong_trung,40,40,1
+co_trong_task_list,40,40,1
+co_trong_file_sau_2_giay,40,40,1
+tin_day_it_nhat_moi_client,40,40,1

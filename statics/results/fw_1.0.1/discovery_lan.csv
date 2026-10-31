@@ -1,0 +1,5 @@
+case,sent,replied,passed,rtt_avg_ms
+broadcast_192.168.1.255,10,10,1,104.07
+broadcast_255.255.255.255,10,9,0,134.84
+mdns_multicast_QU,5,5,1,
+mdns_gui_thang_toi_esp_QU,5,5,1,

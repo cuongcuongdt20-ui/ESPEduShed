@@ -1,0 +1,8 @@
+case,expected,actual,passed
+sao_luu_duoc,OK,OK,1
+ban_bi_cat,BAD_ARG,BAD_ARG,1
+ban_rac,BAD_ARG,BAD_ARG,1
+file_that_giu_nguyen,OK,OK,1
+van_ghi_duoc_sau_khi_tu_choi,OK,OK,1
+ban_dung,OK,OK,1
+du_lieu_trung_sau_khoi_dong_lai,OK,OK,1
