@@ -2,6 +2,7 @@
 // Ở ngoài mạng nhà, app và điện thoại vào ESP32 qua <tên>.duckdns.org khi router đã mở cổng 5000 và 8080.
 import { useState, type FormEvent } from 'react'
 import { Copy, RefreshCw } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 import { api, errorText, useRequest } from '../api'
 import { useSession } from '../session'
 import { useToast } from '../components/toast'
@@ -116,6 +117,15 @@ export function RemotePage() {
           </div>
           {link.error && <p className="text-sm text-destructive">{link.error}</p>}
           {url && <p className="break-all rounded-md border bg-muted/40 px-3 py-2 font-mono text-xs">{url}</p>}
+          {url && (
+            <div className="flex flex-col items-center gap-2 py-1">
+              {/* Nền trắng cố định để camera quét được cả khi app ở giao diện tối; mã sinh ngay trong app, link không gửi đi đâu */}
+              <div className="rounded-md border bg-white">
+                <QRCodeSVG value={url} size={208} level="M" marginSize={4} title="Mã QR của link xem lịch" />
+              </div>
+              <p className="text-xs text-muted-foreground">Quét bằng camera điện thoại để mở link. Mã QR cũng có giá trị như link, đừng chia sẻ.</p>
+            </div>
+          )}
           <div className="flex gap-2">
             <Button size="sm" onClick={copy} disabled={!url}>
               <Copy className="h-4 w-4" /> Sao chép link
