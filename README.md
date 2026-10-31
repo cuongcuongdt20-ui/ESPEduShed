@@ -484,7 +484,7 @@ Cột "Bằng chứng" chỉ ghi những gì đã có trong mã nguồn hoặc �
 | 4 | Lưu trữ an toàn khi mất điện | Ghi file tạm rồi đổi tên nguyên tử trên LittleFS | [`storage.c`](source/server/components/platform/src/storage.c); `reset_during_write.csv` (20/20 lần dữ liệu cũ nguyên; chưa thử rút nguồn thật) |
 | 5 | Kiểm tra trùng lịch và thời gian di chuyển | Thuật toán sắp xếp rồi quét trên danh sách buổi | [`conflict.c`](source/server/components/calendar/src/conflict.c); test [`test_calendar.c`](source/server/test_host/calendar/test_calendar.c) |
 | 6 | Tìm server trong LAN qua UDP broadcast và mDNS | Client không phải nhập IP | [`udp_discovery.c`](source/server/components/discovery/src/udp_discovery.c), [`discovery.ts`](source/client/electron/discovery.ts) |
-| 7 | Xem lịch trên điện thoại và truy cập từ mạng ngoài | HTTP server thứ hai trên ESP32 dùng chung dữ liệu với TCP server; link bí mật; DuckDNS tự cập nhật từ ESP32 | [`webview.c`](source/server/components/webview/src/webview.c), [`ddns.c`](source/server/components/platform/src/ddns.c), [hướng dẫn](docs/huong-dan-truy-cap-tu-xa.md); `compare_http_run*.csv`; đường từ mạng ngoài chưa đo |
+| 7 | Xem lịch trên điện thoại và truy cập từ mạng ngoài | HTTP server thứ hai trên ESP32 dùng chung dữ liệu với TCP server; link bí mật; DuckDNS tự cập nhật từ ESP32 | [`webview.c`](source/server/components/webview/src/webview.c), [`ddns.c`](source/server/components/platform/src/ddns.c), [hướng dẫn](docs/huong-dan-truy-cap-tu-xa.md); `compare_http_run*.csv`; đường từ mạng ngoài: `fw_1.0.1/external/` (mục 14.4) |
 
 ## 7.4. Baseline vs Proposed
 
@@ -795,16 +795,17 @@ Cột Test chỉ ghi những gì đã chạy thật. Test trên máy tính: Wind
 | 6 | Bắt đổi mật khẩu lần đầu | Mọi lệnh khác trả `FORBIDDEN` | Đạt với `fake_server.py`; chưa chạy riêng trên ESP32 |
 | 7 | Tin đẩy thời gian thực | Sửa lịch ở client A, client B nhận `changed` | Đạt trên ESP32, trễ trung bình 147,7 ms (`compare_http_run*.csv`) |
 | 8 | Tự nối lại khi mất kết nối | App thử lại mỗi 2 giây, tự đăng nhập lại nếu ESP đã khởi động lại | Đạt với `fake_server.py`; chưa đo với app trên ESP32 |
-| 9 | Wi-Fi AP cài đặt, sao lưu / khôi phục | `system.wifi`, `system.backup`, `system.restore`; file khôi phục hỏng bị từ chối, giữ nguyên dữ liệu cũ | Kiểm tra file: `make restore_check` đạt; luồng đầy đủ chưa chạy trên ESP32 (`run_experiments.py --only restore`) |
+| 9 | Wi-Fi AP cài đặt, sao lưu / khôi phục | `system.wifi`, `system.backup`, `system.restore`; file khôi phục hỏng bị từ chối, giữ nguyên dữ liệu cũ | Sao lưu, khôi phục đạt 7/7 trên ESP32 (`fw_1.0.1/restore_check.csv`); `make restore_check` đạt 27/27; `system.wifi` chưa chạy trên ESP32 |
 | 10 | Danh mục trường, bảng tiết (TV2) | Quy đổi tiết, tiết không liên tục, 25 lệnh CRUD, gợi ý tiết 50 phút trên form | `make catalog` đạt 19/19, `make catalog_cmd` đạt 178/178; `school.list`, `campus.list` đạt trên ESP32 |
 | 11 | Lịch dạy, công việc, ngoại lệ (TV3) | Sinh buổi, huỷ, dời, đổi phòng, dạy bù, hạn chót; lưu JSON Lines | `make schedule` đạt 44/44, `make schedule_cmd` đạt 134/134, `make schedule_store` đạt 39/39; `occurrence.range`, `task.create`, `task.delete` đạt trên ESP32 |
 | 12 | Lịch tuần FullCalendar, kiểm tra trùng (TV4) | Trùng giờ, thiếu thời gian di chuyển, xác nhận xung đột | `make calendar` đạt 29/29, `make calendar_cmd` đạt 97/97; `calendar.week`, `calendar.range` đạt trên ESP32 |
 | 13 | Một tài khoản duy nhất | Đăng nhập chỉ bằng mật khẩu; `users.json` bản nhiều tài khoản tự chuyển sang, giữ tài khoản admin | Đăng nhập đạt trên ESP32 sau khi nạp đè firmware mới |
-| 14 | Web xem lịch trên điện thoại | `/c/<khoá>`, sai khoá trả 404, `web.rotate` làm link cũ hết hiệu lực | API `/api/<khoá>/range` đạt trên ESP32 (`compare_http_run*.csv`); sai khoá trả 404 trên fw 1.0.1; chưa kiểm tra trang trên điện thoại và `web.rotate` |
-| 15 | DuckDNS, truy cập từ mạng ngoài | Cập nhật IP mỗi 5 phút, app nối bằng tên miền Log serial xác nhận ESP32 cập nhật DuckDNS thành công; nhóm đã thử vào app và link từ mạng ngoài, đạt; chưa đo hiệu năng |
+| 14 | Web xem lịch trên điện thoại | `/c/<khoá>`, sai khoá trả 404, `web.rotate` làm link cũ hết hiệu lực | API `/api/<khoá>/range` đạt trên ESP32 (`compare_http_run*.csv`); sai khoá trả 404 trên fw 1.0.1; nhóm đã mở trang trên điện thoại qua 4G (ảnh trong báo cáo); `web.rotate` làm link cũ trả 404 (`fw_1.0.1/protocol_check.csv`) |
+| 15 | DuckDNS, truy cập từ mạng ngoài | Cập nhật IP mỗi 5 phút, app nối bằng tên miền | Log serial xác nhận ESP32 cập nhật DuckDNS thành công; qua hotspot điện thoại đạt 50/50 yêu cầu, RTT TB 69,84 ms, p95 159,2 ms (`fw_1.0.1/external/`) |
 | 16 | Chọn màu cho lịch dạy, công việc, trường | Bảng 12 màu, hiện trên lịch app và web | `npm run typecheck` đạt; chưa kiểm tra trên giao diện với ESP32 |
 | 17 | Mã QR cho link xem lịch | App tự sinh mã bằng `qrcode.react`, không gửi link ra dịch vụ ngoài | Giải mã ảnh QR sinh ra đúng link (jsQR, OpenCV); chưa quét bằng điện thoại thật |
-| 18 | Tìm server bằng UDP, mDNS | Trả lời gói `ESPEDUSHED_DISCOVER`, bỏ qua gói sai | UDP gửi thẳng trên fw 1.0.1: 20/20 gói đúng, 3/3 gói sai bị bỏ qua (`fw_1.0.1/discovery.csv`); broadcast chưa đo; laptop đo chưa phân giải được `espedushed.local` |
+| 18 | Tìm server bằng UDP, mDNS | Trả lời gói `ESPEDUSHED_DISCOVER`, bỏ qua gói sai | UDP gửi thẳng trên fw 1.0.1: 20/20 gói đúng, 3/3 gói sai bị bỏ qua (`fw_1.0.1/discovery.csv`); broadcast 10/10 và 9/10; ESP trả lời mDNS 5/5 (`fw_1.0.1/discovery_lan.csv`); `ping espedushed.local` trên laptop đo chưa phân giải được |
+| 19 | Nhiều client cùng ghi | Handler chạy tuần tự, không mất hay trùng bản ghi, tin đẩy tới mọi client | 4 client × 10 công việc đạt 6/6 trên ESP32 (`fw_1.0.1/concurrent_write.csv`) |
 
 ---
 
@@ -908,11 +909,32 @@ So với `esp_http_server` trên cùng bo, cùng dữ liệu lịch tuần, 200 
 
 Số byte tính ở tầng ứng dụng, chưa gồm header TCP/IP.
 
+## 14.4. Kiểm thử trên firmware 1.0.1
+
+Đo ngày 31/10/2026 trên cùng bo, dữ liệu gốc trong `statics/results/fw_1.0.1/`. Mạng khác với mục 13.1 nên chỉ dùng để xác định đúng hay sai, không so với số ở mục 14.1–14.3.
+
+| Trường hợp | Mạng | Mong đợi | Thực tế | File |
+| :--- | :--- | :--- | :--- | :--- |
+| Ghép khung | Wi-Fi nhà; mạng ngoài | 3/3 | Đạt 3/3 ở cả hai | `fragment.csv`, `external/fragment.csv` |
+| Mở 10 kết nối | Wi-Fi nhà; mạng ngoài | 1–8 nhận, 9 và 10 `BUSY` | Đạt ở cả hai | `maxconn.csv`, `external/maxconn.csv` |
+| Web sai khoá | Wi-Fi nhà; mạng ngoài | 404 | 404 ở cả hai (lệnh `curl`, không có CSV) | |
+| Tìm server, UDP gửi thẳng | Wi-Fi nhà | 20/20 gói đúng được trả lời, 3 gói sai bị bỏ qua | Đạt, RTT TB 169,27 ms | `discovery.csv` |
+| Tìm server, UDP broadcast | Wi-Fi nhà | ESP trả lời đúng IP và cổng | Mạng con 10/10, RTT TB 104,07 ms; `255.255.255.255` 9/10, RTT TB 134,84 ms | `discovery_lan.csv` |
+| mDNS, truy vấn A `espedushed.local` | Wi-Fi nhà | ESP trả lời đúng IP | Đạt 5/5 | `discovery_lan.csv` |
+| Truy cập từ mạng ngoài qua DuckDNS | Laptop dùng hotspot điện thoại | 50/50 `system.ping` có phản hồi | Đạt 50/50, RTT TB 69,84 ms, p95 159,2 ms, 13,8 lệnh/giây | `external/latency_system_ping.csv` |
+| 4 client cùng ghi, mỗi client 10 công việc | Mạng ngoài | 40/40 bản ghi, không trùng id, có đủ trong file, đủ tin đẩy | Đạt 6/6, xong trong 1,36 giây | `concurrent_write.csv` |
+| Reset sau 2 giây, 10 lần | Mạng ngoài | Bản ghi còn, dữ liệu cũ nguyên | Đạt 10/10 | `reset_during_write.csv` |
+| Reset sau 0,2 giây, 10 lần | Mạng ngoài | Bản ghi mới có thể mất, dữ liệu cũ nguyên | Mất 10/10 bản ghi mới, dữ liệu cũ nguyên 10/10 | `reset_during_write.csv` |
+| Khôi phục dữ liệu | Mạng ngoài | Bản cắt và bản rác trả `BAD_ARG`, file giữ nguyên; bản đúng trùng từng byte sau khởi động lại | Đạt 7/7 | `restore_check.csv` |
+| Mọi lệnh trong `docs/protocol.md` (`python protocol_check.py`) | Mạng ngoài | Đúng mã kết quả và dữ liệu; lệnh cần đăng nhập từ chối khi không có token | Đạt 174/174 trường hợp, đủ 55 lệnh; `system.wifi`, `system.ddns` chỉ thử nhánh lỗi vì thành công sẽ đổi Wi-Fi hoặc tắt DuckDNS | `protocol_check.csv` |
+
+Sau reset, ESP trả lời lại sau trung bình 4,0 giây (3,1–7,7 giây, 20 lần). Hai phép thử broadcast, mDNS dùng script gửi gói trực tiếp nên chưa thay thế được việc bấm nút tìm server trên app. Lần trượt 1/10 với `255.255.255.255` chưa rõ nguyên nhân.
+
 ---
 
 # 15. Discussion
 
-1. **Đạt mục tiêu:** ghép khung, giới hạn kết nối, chống gửi lại, khoá IP, xử lý lỗi và giữ dữ liệu khi reset đều đạt trên bo thật. Chưa kiểm chứng: rút nguồn thật, truy cập từ mạng ngoài, lịch dày, chạy liên tục nhiều ngày.
+1. **Đạt mục tiêu:** ghép khung, giới hạn kết nối, chống gửi lại, khoá IP, xử lý lỗi và giữ dữ liệu khi reset đều đạt trên bo thật. Truy cập từ mạng ngoài qua DuckDNS đạt với 1 client (mục 14.4). Chưa kiểm chứng: rút nguồn thật, lịch dày, chạy liên tục nhiều ngày.
 2. **Mức dùng thật là 1–2 client**, vì sản phẩm phục vụ một người với vài thiết bị: `system.ping` 12–17 ms, `calendar.week` 16–19 ms. 8 client là phép thử giới hạn. Handler chạy tuần tự nên yêu cầu đến cùng lúc phải xếp hàng; `calendar.week` và `occurrence.range` đã giảm thông lượng từ 4 lên 8 client.
 3. **Nút thắt không nằm ở handler:** `maxHandlerUs` chỉ 8,8 ms trong khi p95 của `calendar.week` với 8 client là 208,78 ms, rất ổn định. Điều này gợi ý một bộ định thời của TCP hoặc Wi-Fi, nhưng chưa bắt gói để xác nhận.
 4. **So với HTTP:** lợi thế đáng tin cậy là ít hơn 143 byte mỗi yêu cầu (19%) và server chủ động đẩy tin; RAM mỗi kết nối bằng nhau. RTT thấp hơn 9,3 lần với 1 client chỉ áp dụng cho `esp_http_server` cấu hình mặc định: thư viện gửi từng phần header bằng lệnh gửi riêng, có thể là nguyên nhân chính nhưng chưa đo tách, nên không kết luận giao thức HTTP chậm.
@@ -935,7 +957,7 @@ Số byte tính ở tầng ứng dụng, chưa gồm header TCP/IP.
 11. **Web xem lịch không nhận tin đẩy:** trang tự tải lại khi chuyển tuần, khi mở lại và mỗi phút; muốn thấy ngay thì bấm **Làm mới**.
 12. **Đoán mật khẩu ngoại tuyến:** kẻ nghe lén lúc đăng nhập có `nonce`, `salt`, `iter` và `proof` nên có thể thử đoán nếu mật khẩu yếu. Token DuckDNS đi dạng rõ từ app tới ESP32 khi cấu hình bằng `system.ddns`; từ ESP32 tới DuckDNS thì qua HTTPS.
 13. **Khôi phục dữ liệu:** `system.restore` chỉ kiểm tra cấu trúc file (JSON Lines hoặc object JSON có `schema`), không kiểm tra từng bản ghi. File đúng cấu trúc nhưng sai nội dung vẫn thay file thật, ví dụ dữ liệu lịch gửi nhầm vào `users.json`, hoặc file JSON Lines bị cắt đúng ở cuối một dòng.
-14. **Phiên bản firmware:** số đo hiệu năng trong mục 14 thuộc commit `b4e0394` (fw 1.0.0). Fw 1.0.1 thêm kiểm tra kết quả `fsync`, `fclose` và kiểm tra file khôi phục, không đổi đường đọc đã đo. Đã nạp lên bo, ghép khung và giới hạn kết nối chạy lại đạt (`statics/results/fw_1.0.1/`); reset giữa lúc ghi và khôi phục chưa chạy lại (xem mục 11.4).
+14. **Phiên bản firmware:** số đo hiệu năng trong mục 14 thuộc commit `b4e0394` (fw 1.0.0). Fw 1.0.1 thêm kiểm tra kết quả `fsync`, `fclose` và kiểm tra file khôi phục, không đổi đường đọc đã đo. Đã nạp lên bo và chạy lại đạt, gồm reset giữa lúc ghi và khôi phục dữ liệu (mục 14.4); chưa đo lại các bảng hiệu năng trên fw 1.0.1.
 
 ---
 
@@ -1038,8 +1060,8 @@ Nhom08_ESPEduShed/
 ```text
 [x] Project can run              firmware build và nạp được
 [x] Server can start             ESP mở TCP 5000 (log "TCP server lang nghe cong 5000")
-[ ] Client can connect           công cụ Python đã kết nối được; kiểm tra lại app với firmware mới
-[ ] Network communication works  chưa chạy hết mọi lệnh trong docs/protocol.md trên ESP32
+[x] Client can connect           công cụ Python và app kết nối được trên fw 1.0.1, cả từ mạng ngoài (mục 14.4, ảnh trong báo cáo)
+[x] Network communication works  174/174 trên ESP32, cả 55 lệnh (protocol_check.csv); system.wifi, system.ddns chỉ thử nhánh lỗi
 [x] Protocol is documented       docs/protocol.md
 [x] Multiple clients tested      8 client trên ESP32 (latency_summary.csv)
 [x] Error handling tested        BAD_JSON, UNKNOWN_CMD, BAD_ARG, BUSY, khung sai độ dài

@@ -165,7 +165,7 @@ Lý do: khung tin tối đa 8 KB, danh sách dài (ví dụ 16 trường × 20 t
 | Lệnh | Quyền | `data` gửi | `data` nhận | Lỗi riêng |
 |---|---|---|---|---|
 | `school.list` | đăng nhập | `{}` | `{schools: [{id, name, shortName, color, periods: [{no, start, end}]}]}` | |
-| `school.create` / `school.update` | đăng nhập | `{name, shortName, color}` / thêm `id` | `{id}` | `BAD_ARG`, `FULL`, `CONFLICT` |
+| `school.create` / `school.update` | đăng nhập | `{name, shortName, color}` / thêm `id` | `{id}` | `BAD_ARG`, `FULL`; sửa thêm `NOT_FOUND`. Không kiểm tra trùng tên trường |
 | `school.delete` | đăng nhập | `{id}` | `{}` | `NOT_FOUND`, `CONFLICT` nếu lịch đang dùng trường |
 | `campus.list` | đăng nhập | `{schoolId?}` | `{campuses: [{id, schoolId, name, address}]}` | |
 | `campus.create` / `campus.update` / `campus.delete` | đăng nhập | trường/cơ sở tương ứng | `{id}` hoặc `{}` | `BAD_ARG`, `NOT_FOUND`, `FULL` |
@@ -252,7 +252,7 @@ Tất cả lệnh cần đăng nhập và làm việc trên dữ liệu của t�
 
 ```text
 client → broadcast 255.255.255.255:5001   "ESPEDUSHED_DISCOVER"
-ESP    → unicast về địa chỉ người gửi      {"name":"espedushed","ip":"192.168.1.37","port":5000,"fw":"1.0.0"}
+ESP    → unicast về địa chỉ người gửi      {"name":"espedushed","ip":"192.168.1.37","port":5000,"fw":"1.0.1"}
 ```
 
 Tin không đúng nội dung thì bỏ qua. Tối đa 10 lần trả lời mỗi giây.
