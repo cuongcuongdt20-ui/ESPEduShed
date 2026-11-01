@@ -978,7 +978,7 @@ Sau reset, ESP trả lời lại sau trung bình 4,0 giây (3,1–7,7 giây, 20 
 report/Nhom08_ESPEduShed_Report.docx      (nộp trên Compilatio)
 ```
 
-Báo cáo phải kiểm tra trên Compilatio (yêu cầu ≤ 20%). Kết quả Compilatio: chưa kiểm tra.
+Báo cáo phải kiểm tra trên Compilatio (yêu cầu ≤ 20%). Kết quả Compilatio: **10,04%**, đạt yêu cầu.
 
 ---
 
@@ -1071,7 +1071,7 @@ Nhom08_ESPEduShed/
 [x] README is complete
 [ ] Report is complete
 [x] References are included      mục 19
-[ ] Compilatio <= 20%
+[x] Compilatio <= 20%            10,04% (mục 18)
 [ ] Google Drive link is accessible
 [ ] All team members understand the project
 ```
